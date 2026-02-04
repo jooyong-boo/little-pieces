@@ -19,7 +19,9 @@ export default function HomeScreen() {
             }
         >
             <ThemedView style={styles.titleContainer}>
-                <ThemedText type="title">차예나</ThemedText>
+                <ThemedText type="title" className="text-blue-500">
+                    차
+                </ThemedText>
                 <HelloWave />
             </ThemedView>
             <ThemedView style={styles.stepContainer}>
