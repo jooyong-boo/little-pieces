@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 This is an Expo React Native application called "little-pieces" that uses:
+
 - **Expo SDK 54** with the new architecture enabled (`newArchEnabled: true`)
 - **React 19.1.0** and **React Native 0.81.5**
 - **Expo Router 6** with typed routes and file-based navigation
@@ -16,6 +17,7 @@ The app supports iOS, Android, and web platforms with automatic dark/light theme
 ## Development Commands
 
 ### Running the App
+
 ```bash
 npm start                 # Start Expo dev server
 npm run android          # Run on Android (dev build)
@@ -24,11 +26,13 @@ npm run web              # Run on web
 ```
 
 ### Code Quality
+
 ```bash
 npm run lint             # Run ESLint (uses expo's flat config)
 ```
 
 ### Reset Project
+
 ```bash
 npm run reset-project    # Moves current app/ to app-example/ for fresh start
 ```
@@ -89,12 +93,14 @@ The app has a comprehensive theming system with dark/light mode support:
 ### Path Aliases
 
 TypeScript is configured with path aliases in `tsconfig.json`:
+
 - `@/*` maps to root directory
 - Example: `import { Colors } from '@/constants/theme'`
 
 ### Platform-Specific Code
 
 The codebase uses React Native's `Platform` API and platform-specific file extensions:
+
 - Use `Platform.select()` for conditional values
 - Use `.ios.tsx`, `.android.tsx`, `.web.tsx` for platform-specific implementations
 
@@ -115,16 +121,19 @@ The codebase uses React Native's `Platform` API and platform-specific file exten
 ## Adding New Features
 
 ### Adding a New Screen
+
 1. Create file in `app/` or `app/(tabs)/` directory
 2. Export default component
 3. Route is automatically available based on file name
 
 ### Adding a New Themed Component
+
 1. Import `useThemeColor` from `@/hooks/use-theme-color`
 2. Accept optional `lightColor`/`darkColor` props
 3. Use theme color tokens from `Colors` object
 
 ### Adding Icons
+
 - Use `IconSymbol` component from `@/components/ui/icon-symbol`
 - On iOS, it uses SF Symbols (check Apple's SF Symbols app for available names)
 - On other platforms, uses Expo vector icons

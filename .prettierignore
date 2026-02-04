@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+.expo/
+dist/
+build/
+.next/
+
+# Native builds
+android/
+ios/
+
+# Expo
+.expo-shared/
+
+# Environment
+.env
+.env.*
+
+# Cache
+.cache/
+*.log
+
+# Generated files
+*.d.ts
+*.js.map
+
+# Lockfiles
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
