@@ -1,0 +1,23 @@
+node_modules
+.pnpm-store
+.turbo
+
+# next
+.next
+out
+
+# nest
+apps/api/dist
+apps/api/*.tsbuildinfo
+
+# prisma
+apps/api/prisma/dev.db
+
+# package build artifacts
+packages/*/dist
+packages/*/*.tsbuildinfo
+
+# env
+.env
+.env.*
+!.env.example

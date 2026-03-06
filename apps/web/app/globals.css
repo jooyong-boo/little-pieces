@@ -1,0 +1,77 @@
+:root {
+  color-scheme: light;
+  font-family: 'Pretendard', 'Noto Sans KR', sans-serif;
+  background: #f4f7fb;
+  color: #16202c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+.page {
+  max-width: 840px;
+  margin: 0 auto;
+  padding: 48px 20px;
+}
+
+.links {
+  display: flex;
+  gap: 16px;
+}
+
+.links a {
+  background: #1f4ea3;
+  color: #ffffff;
+  padding: 10px 14px;
+  border-radius: 8px;
+  text-decoration: none;
+}
+
+.panel {
+  display: grid;
+  gap: 8px;
+  max-width: 360px;
+  margin-top: 20px;
+  padding: 20px;
+  border: 1px solid #d7e2ef;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.panel input {
+  border: 1px solid #b7c6d8;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.panel button {
+  margin-top: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: #1f4ea3;
+  color: #ffffff;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.topbar {
+  border-bottom: 1px solid #d7e2ef;
+  padding: 14px 20px;
+  background: #ffffff;
+}
+
+.map-placeholder {
+  margin-top: 20px;
+  height: 360px;
+  border: 2px dashed #8ea7c9;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(180deg, #edf4ff 0%, #f7fbff 100%);
+}

@@ -1,0 +1,1 @@
+export const authFeatureReady = true;
