@@ -1,8 +1,8 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "pnpm build:railway"
+buildCommand = "pnpm --filter @little-pieces/api build:railway"
 
 [deploy]
-startCommand = "pnpm start:railway"
+startCommand = "pnpm --filter @little-pieces/api start:railway"
 healthcheckPath = "/health"
 healthcheckTimeout = 100
