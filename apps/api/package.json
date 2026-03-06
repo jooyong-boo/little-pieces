@@ -5,7 +5,10 @@
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "build": "tsc -p tsconfig.build.json",
+    "build:railway": "pnpm prisma:generate && pnpm build",
     "start": "node dist/main.js",
+    "start:prod": "node dist/main.js",
+    "start:railway": "pnpm start:prod",
     "postinstall": "prisma generate",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
