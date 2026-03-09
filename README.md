@@ -109,8 +109,8 @@ API health check endpoint:
 `apps/api/.env.example`을 복사해서 사용합니다.
 
 - `PORT`: API 실행 포트
-- `DATABASE_URL`: Supabase pooler connection string (`pgbouncer=true`)
-- `DIRECT_URL`: Prisma migration/DDL용 direct connection (`5432`)
+- `DATABASE_URL`: Supabase transaction pooler connection string (`6543`, `pgbouncer=true`)
+- `DIRECT_URL`: Prisma CLI/migration용 session connection string (`5432`)
 - `JWT_SECRET`: JWT 서명 키 placeholder
 - `CORS_ORIGIN`: 허용할 origin 목록(쉼표 구분 가능)
 
@@ -126,6 +126,7 @@ cp apps/api/.env.example apps/api/.env
 - Prisma는 애플리케이션 ORM 레이어로 유지합니다.
 - Railway 배포 시 `build:railway` 스크립트로 Prisma Client generate를 보장합니다.
 - 로컬에서 연동 확인은 API 실행 후 `GET /health`로 확인합니다. `database.status`가 `connected`여야 정상입니다.
+- 로컬에서 `db.<project-ref>.supabase.co:5432` direct host가 닿지 않으면, `DIRECT_URL`은 Supabase session pooler(`aws-0-<region>.pooler.supabase.com:5432`)를 사용합니다.
 
 ## 앱/패키지 설명
 

@@ -13,6 +13,20 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
       return;
     }
 
-    await this.$connect();
+    try {
+      await this.$connect();
+    } catch (error) {
+      this.logger.warn(
+        `Prisma DB connection failed during bootstrap. Runtime queries will keep using the configured datasource. ${this.formatErrorMessage(error)}`,
+      );
+    }
+  }
+
+  private formatErrorMessage(error: unknown) {
+    if (error instanceof Error) {
+      return error.message;
+    }
+
+    return 'Unknown connection error.';
   }
 }
