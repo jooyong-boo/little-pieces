@@ -24,6 +24,12 @@ pub enum AppError {
     CoupleFull,
     #[error("대상을 찾을 수 없습니다.")]
     NotFound,
+    #[error("이미지 저장소가 설정되지 않았습니다.")]
+    StorageUnavailable,
+    #[error("지원하지 않는 이미지 형식입니다.")]
+    UnsupportedImageType,
+    #[error("다른 커플의 이미지는 사용할 수 없습니다.")]
+    ForeignImageKey,
     #[error("internal error: {0}")]
     Internal(String),
     #[error(transparent)]
@@ -35,13 +41,14 @@ pub enum AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let status = match &self {
-            AppError::Validation(_) => StatusCode::BAD_REQUEST,
+            AppError::Validation(_) | AppError::UnsupportedImageType => StatusCode::BAD_REQUEST,
             AppError::InvalidCredentials => StatusCode::UNAUTHORIZED,
-            AppError::NoCouple => StatusCode::FORBIDDEN,
+            AppError::NoCouple | AppError::ForeignImageKey => StatusCode::FORBIDDEN,
             AppError::EmailTaken | AppError::AlreadyInCouple | AppError::CoupleFull => {
                 StatusCode::CONFLICT
             }
             AppError::InviteNotFound | AppError::NotFound => StatusCode::NOT_FOUND,
+            AppError::StorageUnavailable => StatusCode::SERVICE_UNAVAILABLE,
             AppError::Internal(_) | AppError::Database(_) | AppError::Token(_) => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }

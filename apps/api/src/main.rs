@@ -7,6 +7,7 @@ mod memories;
 mod response;
 mod routes;
 mod state;
+mod storage;
 mod users;
 
 use state::AppState;
@@ -28,9 +29,25 @@ async fn main() {
         .await
         .expect("failed to run migrations");
 
+    // 스토리지 설정이 틀렸으면 알려주되 서버는 띄운다 — 사진만 못 쓰고 나머지는 돈다.
+    let storage = config
+        .s3
+        .as_ref()
+        .and_then(|s3| match storage::Storage::new(s3) {
+            Ok(storage) => Some(storage),
+            Err(message) => {
+                tracing::error!("{message} — 이미지 업로드가 비활성화됩니다");
+                None
+            }
+        });
+    if storage.is_none() {
+        tracing::warn!("S3 설정이 없어 이미지 업로드가 비활성화됩니다");
+    }
+
     let state = AppState {
         pool,
         jwt_secret: config.jwt_secret,
+        storage,
     };
     let app = routes::build(state);
 

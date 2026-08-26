@@ -3,7 +3,7 @@ use axum::{
     extract::{Path, State},
 };
 use chrono::NaiveDate;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
@@ -12,11 +12,13 @@ use crate::{
     memories::repo::{self, MemoryInput, MemoryView},
     response::ApiResponse,
     state::AppState,
+    storage::{self, Storage},
 };
 
 const TITLE_MAX_LEN: usize = 120;
 const DESCRIPTION_MAX_LEN: usize = 500;
 const PLACE_NAME_MAX_LEN: usize = 100;
+const MAX_IMAGES: usize = 10;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -26,7 +28,22 @@ pub struct MemoryRequest {
     pub place_name: Option<String>,
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
+    pub image_keys: Option<Vec<String>>,
     pub visited_at: NaiveDate,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UploadUrlRequest {
+    pub content_type: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UploadUrlResponse {
+    pub key: String,
+    pub upload_url: String,
+    pub expires_in_seconds: u64,
 }
 
 /// 빈 문자열은 "값 없음"으로 취급한다 — 폼에서 비워 보낸 것과 같다.
@@ -68,7 +85,27 @@ fn validate_coordinates(
     }
 }
 
-fn to_input(payload: MemoryRequest) -> Result<MemoryInput, AppError> {
+/// 클라이언트가 보낸 키를 그대로 믿으면 남의 커플 사진을 참조할 수 있다.
+/// 전 항목이 이 커플 소유인지 확인한다.
+fn validate_image_keys(
+    couple_id: Uuid,
+    keys: Option<Vec<String>>,
+) -> Result<Vec<String>, AppError> {
+    let keys = keys.unwrap_or_default();
+
+    if keys.len() > MAX_IMAGES {
+        return Err(AppError::Validation(format!(
+            "사진은 {MAX_IMAGES}장까지 넣을 수 있습니다."
+        )));
+    }
+    if keys.iter().any(|key| !storage::is_owned_by(couple_id, key)) {
+        return Err(AppError::ForeignImageKey);
+    }
+
+    Ok(keys)
+}
+
+fn to_input(couple_id: Uuid, payload: MemoryRequest) -> Result<MemoryInput, AppError> {
     let title = payload.title.trim().to_string();
     if title.is_empty() {
         return Err(AppError::Validation("제목을 입력해주세요.".into()));
@@ -87,6 +124,7 @@ fn to_input(payload: MemoryRequest) -> Result<MemoryInput, AppError> {
         place_name: optional_text(payload.place_name, PLACE_NAME_MAX_LEN, "장소명")?,
         latitude,
         longitude,
+        image_keys: validate_image_keys(couple_id, payload.image_keys)?,
         visited_at: payload.visited_at,
     })
 }
@@ -96,8 +134,15 @@ pub async fn create(
     CoupleMember { user_id, couple_id }: CoupleMember,
     Json(payload): Json<MemoryRequest>,
 ) -> Result<Json<ApiResponse<MemoryView>>, AppError> {
-    let input = to_input(payload)?;
-    let memory = repo::create(&state.pool, couple_id, user_id, &input).await?;
+    let input = to_input(couple_id, payload)?;
+    let memory = repo::create(
+        &state.pool,
+        state.storage.as_ref(),
+        couple_id,
+        user_id,
+        &input,
+    )
+    .await?;
     Ok(Json(ApiResponse::ok(memory)))
 }
 
@@ -105,7 +150,7 @@ pub async fn list(
     State(state): State<AppState>,
     CoupleMember { couple_id, .. }: CoupleMember,
 ) -> Result<Json<ApiResponse<Vec<MemoryView>>>, AppError> {
-    let memories = repo::list(&state.pool, couple_id).await?;
+    let memories = repo::list(&state.pool, state.storage.as_ref(), couple_id).await?;
     Ok(Json(ApiResponse::ok(memories)))
 }
 
@@ -114,7 +159,7 @@ pub async fn find(
     CoupleMember { couple_id, .. }: CoupleMember,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ApiResponse<MemoryView>>, AppError> {
-    let memory = repo::find(&state.pool, couple_id, id).await?;
+    let memory = repo::find(&state.pool, state.storage.as_ref(), couple_id, id).await?;
     Ok(Json(ApiResponse::ok(memory)))
 }
 
@@ -124,8 +169,8 @@ pub async fn update(
     Path(id): Path<Uuid>,
     Json(payload): Json<MemoryRequest>,
 ) -> Result<Json<ApiResponse<MemoryView>>, AppError> {
-    let input = to_input(payload)?;
-    let memory = repo::update(&state.pool, couple_id, id, &input).await?;
+    let input = to_input(couple_id, payload)?;
+    let memory = repo::update(&state.pool, state.storage.as_ref(), couple_id, id, &input).await?;
     Ok(Json(ApiResponse::ok(memory)))
 }
 
@@ -138,9 +183,33 @@ pub async fn delete(
     Ok(Json(ApiResponse::ok(())))
 }
 
+/// 추억 ID를 요구하지 않는다. 신규 작성 화면에는 추억이 아직 없으므로,
+/// ID를 요구하면 "추억 먼저 만들고 → 업로드 → 다시 수정" 3단이 된다.
+/// 커플 스코프 키만 있으면 신규와 수정이 같은 경로를 쓴다.
+pub async fn upload_url(
+    State(state): State<AppState>,
+    CoupleMember { couple_id, .. }: CoupleMember,
+    Json(payload): Json<UploadUrlRequest>,
+) -> Result<Json<ApiResponse<UploadUrlResponse>>, AppError> {
+    let storage = state.storage.as_ref().ok_or(AppError::StorageUnavailable)?;
+
+    let key = storage::image_key(couple_id, payload.content_type.trim())?;
+    let upload_url = storage.presign_put(&key);
+
+    Ok(Json(ApiResponse::ok(UploadUrlResponse {
+        key,
+        upload_url,
+        expires_in_seconds: Storage::put_url_ttl_seconds(),
+    })))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn couple() -> Uuid {
+        Uuid::parse_str("11111111-1111-4111-8111-111111111111").unwrap()
+    }
 
     fn request(title: &str) -> MemoryRequest {
         MemoryRequest {
@@ -149,18 +218,19 @@ mod tests {
             place_name: None,
             latitude: None,
             longitude: None,
+            image_keys: None,
             visited_at: NaiveDate::from_ymd_opt(2026, 8, 26).unwrap(),
         }
     }
 
     #[test]
     fn rejects_blank_title() {
-        assert!(to_input(request("   ")).is_err());
+        assert!(to_input(couple(), request("   ")).is_err());
     }
 
     #[test]
     fn accepts_memory_without_location() {
-        assert!(to_input(request("첫 데이트")).is_ok());
+        assert!(to_input(couple(), request("첫 데이트")).is_ok());
     }
 
     #[test]
@@ -178,6 +248,49 @@ mod tests {
     #[test]
     fn treats_empty_description_as_absent() {
         assert_eq!(optional_text(Some("  ".into()), 10, "설명").unwrap(), None);
+    }
+
+    #[test]
+    fn accepts_own_couples_image_keys() {
+        let key = storage::image_key(couple(), "image/jpeg").unwrap();
+        assert_eq!(
+            validate_image_keys(couple(), Some(vec![key.clone()])).unwrap(),
+            vec![key]
+        );
+    }
+
+    #[test]
+    fn rejects_another_couples_image_key() {
+        let other = Uuid::parse_str("22222222-2222-4222-8222-222222222222").unwrap();
+        let theirs = storage::image_key(other, "image/jpeg").unwrap();
+        assert!(validate_image_keys(couple(), Some(vec![theirs])).is_err());
+    }
+
+    #[test]
+    fn rejects_one_bad_key_among_good_ones() {
+        let other = Uuid::parse_str("22222222-2222-4222-8222-222222222222").unwrap();
+        let keys = vec![
+            storage::image_key(couple(), "image/jpeg").unwrap(),
+            storage::image_key(other, "image/png").unwrap(),
+            storage::image_key(couple(), "image/webp").unwrap(),
+        ];
+        assert!(validate_image_keys(couple(), Some(keys)).is_err());
+    }
+
+    #[test]
+    fn rejects_more_images_than_the_limit() {
+        let keys = (0..=MAX_IMAGES)
+            .map(|_| storage::image_key(couple(), "image/jpeg").unwrap())
+            .collect();
+        assert!(validate_image_keys(couple(), Some(keys)).is_err());
+    }
+
+    #[test]
+    fn treats_missing_image_keys_as_none_selected() {
+        assert_eq!(
+            validate_image_keys(couple(), None).unwrap(),
+            Vec::<String>::new()
+        );
     }
 
     #[test]

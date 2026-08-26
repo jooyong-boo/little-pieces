@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 커플 연동은 계정이 둘 필요해서 손으로 확인하기 번거롭다. 한 번에 돌린다.
 #
-#   docker compose up -d db && pnpm api:dev   # 다른 터미널
+#   docker compose up -d db minio minio-init && pnpm api:dev   # 다른 터미널
 #   ./apps/api/scripts/e2e.sh
 set -euo pipefail
 
@@ -94,6 +94,55 @@ check 200 "B: 추억 수정" -X PUT "$API/memories/$MEMORY_ID" -H "Authorization
 check 404 "C: 남의 커플 추억 삭제 불가" -X DELETE "$API/memories/$MEMORY_ID" -H "Authorization: Bearer $C_TOKEN"
 
 check 401 "토큰 없이 접근 거부" "$API/memories"
+
+# ---- 이미지 ----------------------------------------------------------------
+# 1x1 PNG. 업로드한 바이트와 내려받은 바이트를 비교하려면 실제 파일이 필요하다.
+IMAGE=$(mktemp -t lp-e2e-XXXXXX).png
+node -e 'require("fs").writeFileSync(process.argv[1], Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==","base64"))' "$IMAGE"
+trap 'rm -f "$IMAGE" "$IMAGE.roundtrip"' EXIT
+
+check 200 "A: 업로드 URL 발급" -X POST "$API/memories/upload-url" -H "Authorization: Bearer $A_TOKEN" \
+  -H 'Content-Type: application/json' -d '{"contentType":"image/png"}'
+IMAGE_KEY=$(json data.key)
+UPLOAD_URL=$(json data.uploadUrl)
+echo "  키: $IMAGE_KEY" >&2
+
+check 400 "A: 허용 안 되는 contentType 거부" -X POST "$API/memories/upload-url" -H "Authorization: Bearer $A_TOKEN" \
+  -H 'Content-Type: application/json' -d '{"contentType":"application/pdf"}'
+
+check 200 "A: 서명된 URL로 실제 업로드" -X PUT --upload-file "$IMAGE" -H 'Content-Type: image/png' "$UPLOAD_URL"
+
+check 200 "A: 키를 붙여 추억 저장" -X PUT "$API/memories/$MEMORY_ID" -H "Authorization: Bearer $A_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d "{\"title\":\"사진 있는 추억\",\"visitedAt\":\"2024-05-01\",\"imageKeys\":[\"$IMAGE_KEY\"]}"
+[ "$(json data.imageKeys.0)" = "$IMAGE_KEY" ] || { echo "✖ imageKeys 미반영: $BODY" >&2; exit 1; }
+
+check 200 "B: 파트너에게도 서명된 조회 URL이 내려옴" "$API/memories/$MEMORY_ID" -H "Authorization: Bearer $B_TOKEN"
+IMAGE_URL=$(json data.imageUrls.0)
+[ -n "$IMAGE_URL" ] || { echo "✖ imageUrls가 비어있음: $BODY" >&2; exit 1; }
+
+# 서명·헤더·contentType이 모두 맞았다는 유일한 증거: 바이트가 왕복해서 같다.
+curl -sS -o "$IMAGE.roundtrip" "$IMAGE_URL"
+if cmp -s "$IMAGE" "$IMAGE.roundtrip"; then
+  echo "✓ 업로드한 바이트와 내려받은 바이트가 동일" >&2
+else
+  echo "✖ 왕복한 바이트가 다르다 ($(wc -c < "$IMAGE") vs $(wc -c < "$IMAGE.roundtrip") bytes)" >&2
+  exit 1
+fi
+
+# C의 커플 스코프 키를 A가 자기 추억에 붙이려는 시도. 이게 뚫리면 남의 사진을 읽을 수 있다.
+check 200 "C: 자기 커플 키 발급" -X POST "$API/memories/upload-url" -H "Authorization: Bearer $C_TOKEN" \
+  -H 'Content-Type: application/json' -d '{"contentType":"image/png"}'
+FOREIGN_KEY=$(json data.key)
+
+check 403 "A: 다른 커플의 키를 붙이면 거부" -X PUT "$API/memories/$MEMORY_ID" -H "Authorization: Bearer $A_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d "{\"title\":\"훔치기\",\"visitedAt\":\"2024-05-01\",\"imageKeys\":[\"$FOREIGN_KEY\"]}"
+
+check 400 "A: 사진 11장은 거부" -X PUT "$API/memories/$MEMORY_ID" -H "Authorization: Bearer $A_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d "{\"title\":\"많음\",\"visitedAt\":\"2024-05-01\",\"imageKeys\":[$(for i in $(seq 1 11); do printf '"%s",' "$IMAGE_KEY"; done | sed 's/,$//')]}"
+# ---------------------------------------------------------------------------
 
 check 200 "B: 커플에서 나가기" -X DELETE "$API/couples/me" -H "Authorization: Bearer $B_TOKEN"
 check 403 "B: 나간 뒤 추억 접근 불가" "$API/memories" -H "Authorization: Bearer $B_TOKEN"

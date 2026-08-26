@@ -26,6 +26,8 @@ pub fn build(state: AppState) -> Router {
         )
         .route("/couples/join", post(couples::join))
         .route("/memories", get(memories::list).post(memories::create))
+        // 정적 세그먼트가 `/memories/{id}`보다 우선이라 UUID 파싱으로 새지 않는다.
+        .route("/memories/upload-url", post(memories::upload_url))
         .route(
             "/memories/{id}",
             get(memories::find)
