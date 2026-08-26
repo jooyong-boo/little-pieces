@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: npx expo customize tsconfig.json
+        working-directory: apps/mobile
+
+      - run: pnpm --filter mobile run typecheck
+
+      - run: pnpm --filter mobile run lint
+
+      - run: pnpm --filter mobile run format:check
+
+      - run: pnpm --filter mobile run test --ci
+
+  api:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: little_pieces
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/little_pieces
+      JWT_SECRET: ci-test-secret
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: cargo install sqlx-cli --no-default-features --features postgres,rustls
+
+      - run: sqlx migrate run
+        working-directory: apps/api
+
+      - run: cargo fmt --check
+        working-directory: apps/api
+
+      - run: cargo clippy --all-targets -- -D warnings
+        working-directory: apps/api
+
+      - run: cargo build
+        working-directory: apps/api
+
+      - run: cargo test
+        working-directory: apps/api

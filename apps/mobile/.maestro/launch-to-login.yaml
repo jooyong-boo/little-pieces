@@ -1,0 +1,7 @@
+appId: com.littlepieces.app
+---
+- launchApp:
+    clearState: true
+- assertVisible: '로그인'
+- assertVisible:
+    text: '이메일'
