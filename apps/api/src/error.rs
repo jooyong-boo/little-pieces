@@ -14,6 +14,16 @@ pub enum AppError {
     InvalidCredentials,
     #[error("email already registered")]
     EmailTaken,
+    #[error("커플에 소속되어 있지 않습니다.")]
+    NoCouple,
+    #[error("이미 커플에 소속되어 있습니다.")]
+    AlreadyInCouple,
+    #[error("초대 코드를 찾을 수 없습니다.")]
+    InviteNotFound,
+    #[error("이미 두 명이 참여한 커플입니다.")]
+    CoupleFull,
+    #[error("대상을 찾을 수 없습니다.")]
+    NotFound,
     #[error("internal error: {0}")]
     Internal(String),
     #[error(transparent)]
@@ -27,7 +37,11 @@ impl IntoResponse for AppError {
         let status = match &self {
             AppError::Validation(_) => StatusCode::BAD_REQUEST,
             AppError::InvalidCredentials => StatusCode::UNAUTHORIZED,
-            AppError::EmailTaken => StatusCode::CONFLICT,
+            AppError::NoCouple => StatusCode::FORBIDDEN,
+            AppError::EmailTaken | AppError::AlreadyInCouple | AppError::CoupleFull => {
+                StatusCode::CONFLICT
+            }
+            AppError::InviteNotFound | AppError::NotFound => StatusCode::NOT_FOUND,
             AppError::Internal(_) | AppError::Database(_) | AppError::Token(_) => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
