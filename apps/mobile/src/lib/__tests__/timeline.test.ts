@@ -10,6 +10,8 @@ const memory = (id: string, visitedAt: string): Memory => ({
   placeName: null,
   latitude: null,
   longitude: null,
+  imageKeys: [],
+  imageUrls: [],
   visitedAt,
   createdAt: '2026-08-26T00:00:00Z',
 });

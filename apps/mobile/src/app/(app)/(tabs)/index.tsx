@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { Link } from 'expo-router';
 import { ActivityIndicator, Pressable, SectionList, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -70,7 +71,13 @@ function WaitingForPartner() {
  * 그대로 두면 "📍"까지 읽히므로 라벨을 직접 준다.
  */
 function memoryLabel(memory: Memory) {
-  return [memory.title, memory.placeName, memory.authorNickname && `${memory.authorNickname} 기록`]
+  return [
+    memory.title,
+    memory.placeName,
+    // 스크린리더는 썸네일을 읽지 못하므로 사진이 있다는 사실을 말로 남긴다.
+    memory.imageKeys.length > 0 && `사진 ${memory.imageKeys.length}장`,
+    memory.authorNickname && `${memory.authorNickname} 기록`,
+  ]
     .filter(Boolean)
     .join(', ');
 }
@@ -80,22 +87,31 @@ function MemoryRow({ memory }: { memory: Memory }) {
     // Link asChild는 자식에 onPress를 넣는다. View는 onPress를 무시하므로 Pressable이어야 한다.
     <Link href={{ pathname: '/memory/[id]', params: { id: memory.id } }} asChild>
       <Pressable
-        className="rounded-xl border border-gray-200 p-4"
+        className="flex-row gap-3 rounded-xl border border-gray-200 p-4"
         accessibilityRole="button"
         accessibilityLabel={memoryLabel(memory)}
       >
-        <Text className="text-base font-semibold">{memory.title}</Text>
-        {memory.placeName ? (
-          <Text className="mt-1 text-sm text-gray-600">📍 {memory.placeName}</Text>
+        {memory.imageUrls[0] ? (
+          <Image
+            source={{ uri: memory.imageUrls[0] }}
+            style={{ width: 64, height: 64, borderRadius: 8 }}
+          />
         ) : null}
-        {memory.description ? (
-          <Text className="mt-1 text-sm text-gray-600" numberOfLines={2}>
-            {memory.description}
-          </Text>
-        ) : null}
-        {memory.authorNickname ? (
-          <Text className="mt-2 text-xs text-gray-400">{memory.authorNickname}</Text>
-        ) : null}
+
+        <View className="flex-1">
+          <Text className="text-base font-semibold">{memory.title}</Text>
+          {memory.placeName ? (
+            <Text className="mt-1 text-sm text-gray-600">📍 {memory.placeName}</Text>
+          ) : null}
+          {memory.description ? (
+            <Text className="mt-1 text-sm text-gray-600" numberOfLines={2}>
+              {memory.description}
+            </Text>
+          ) : null}
+          {memory.authorNickname ? (
+            <Text className="mt-2 text-xs text-gray-400">{memory.authorNickname}</Text>
+          ) : null}
+        </View>
       </Pressable>
     </Link>
   );

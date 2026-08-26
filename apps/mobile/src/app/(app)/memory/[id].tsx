@@ -6,6 +6,7 @@ import { Button } from '@/components/button';
 import { ErrorText } from '@/components/error-text';
 import { MemoryForm } from '@/components/memory-form';
 import { useDeleteMemory, useMemory, useUpdateMemory } from '@/hooks/use-memories';
+import { fromMemory } from '@/lib/memory-images';
 
 export default function MemoryDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -44,6 +45,7 @@ export default function MemoryDetailScreen() {
                 placeName: query.data.placeName ?? '',
                 visitedAt: query.data.visitedAt,
               }}
+              initialImages={fromMemory(query.data)}
               submitLabel="저장"
               isPending={update.isPending}
               error={update.error}

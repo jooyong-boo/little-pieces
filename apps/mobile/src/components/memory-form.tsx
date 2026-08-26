@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { View } from 'react-native';
 import { z } from 'zod';
@@ -6,7 +7,9 @@ import { z } from 'zod';
 import { Button } from '@/components/button';
 import { ErrorText } from '@/components/error-text';
 import { FormField } from '@/components/form-field';
+import { ImageStrip } from '@/components/image-strip';
 import type { MemoryInput } from '@/lib/memory-api';
+import { toKeys, type MemoryImage } from '@/lib/memory-images';
 import { todayIso } from '@/lib/timeline';
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -24,6 +27,8 @@ export type MemoryFormDefaults = Partial<MemoryFormValues>;
 
 type MemoryFormProps = {
   defaults?: MemoryFormDefaults;
+  /** 수정 화면에서 이미 올려둔 사진. */
+  initialImages?: MemoryImage[];
   submitLabel: string;
   isPending: boolean;
   error: Error | null;
@@ -33,7 +38,15 @@ type MemoryFormProps = {
 /** 비워둔 칸은 null로 보낸다 — 서버도 빈 문자열을 "없음"으로 취급한다. */
 const nullIfBlank = (value: string) => (value.trim() === '' ? null : value.trim());
 
-export function MemoryForm({ defaults, submitLabel, isPending, error, onSubmit }: MemoryFormProps) {
+export function MemoryForm({
+  defaults,
+  initialImages,
+  submitLabel,
+  isPending,
+  error,
+  onSubmit,
+}: MemoryFormProps) {
+  const [images, setImages] = useState<MemoryImage[]>(initialImages ?? []);
   const { control, handleSubmit } = useForm<MemoryFormValues>({
     resolver: zodResolver(memoryFormSchema),
     defaultValues: {
@@ -49,9 +62,10 @@ export function MemoryForm({ defaults, submitLabel, isPending, error, onSubmit }
       title: values.title.trim(),
       description: nullIfBlank(values.description),
       placeName: nullIfBlank(values.placeName),
-      // 위치는 2차(지도)에서 채운다. 지금은 항상 비운다.
+      // 위치는 지도 단계에서 채운다. 지금은 항상 비운다.
       latitude: null,
       longitude: null,
+      imageKeys: toKeys(images),
       visitedAt: values.visitedAt,
     });
 
@@ -66,6 +80,7 @@ export function MemoryForm({ defaults, submitLabel, isPending, error, onSubmit }
         keyboardType="numbers-and-punctuation"
       />
       <FormField control={control} name="placeName" label="장소 (선택)" placeholder="예: 성수동" />
+      <ImageStrip images={images} onChange={setImages} />
       <FormField
         control={control}
         name="description"
