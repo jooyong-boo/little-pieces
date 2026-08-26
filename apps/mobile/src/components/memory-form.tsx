@@ -1,0 +1,84 @@
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+import { View } from 'react-native';
+import { z } from 'zod';
+
+import { Button } from '@/components/button';
+import { ErrorText } from '@/components/error-text';
+import { FormField } from '@/components/form-field';
+import type { MemoryInput } from '@/lib/memory-api';
+import { todayIso } from '@/lib/timeline';
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+const memoryFormSchema = z.object({
+  title: z.string().trim().min(1, '제목을 입력해주세요.').max(120, '120자 이하로 입력해주세요.'),
+  description: z.string().max(500, '500자 이하로 입력해주세요.'),
+  placeName: z.string().max(100, '100자 이하로 입력해주세요.'),
+  visitedAt: z.string().regex(ISO_DATE, 'YYYY-MM-DD 형식으로 입력해주세요.'),
+});
+
+type MemoryFormValues = z.infer<typeof memoryFormSchema>;
+
+export type MemoryFormDefaults = Partial<MemoryFormValues>;
+
+type MemoryFormProps = {
+  defaults?: MemoryFormDefaults;
+  submitLabel: string;
+  isPending: boolean;
+  error: Error | null;
+  onSubmit: (input: MemoryInput) => void;
+};
+
+/** 비워둔 칸은 null로 보낸다 — 서버도 빈 문자열을 "없음"으로 취급한다. */
+const nullIfBlank = (value: string) => (value.trim() === '' ? null : value.trim());
+
+export function MemoryForm({ defaults, submitLabel, isPending, error, onSubmit }: MemoryFormProps) {
+  const { control, handleSubmit } = useForm<MemoryFormValues>({
+    resolver: zodResolver(memoryFormSchema),
+    defaultValues: {
+      title: defaults?.title ?? '',
+      description: defaults?.description ?? '',
+      placeName: defaults?.placeName ?? '',
+      visitedAt: defaults?.visitedAt ?? todayIso(),
+    },
+  });
+
+  const submit = (values: MemoryFormValues) =>
+    onSubmit({
+      title: values.title.trim(),
+      description: nullIfBlank(values.description),
+      placeName: nullIfBlank(values.placeName),
+      // 위치는 2차(지도)에서 채운다. 지금은 항상 비운다.
+      latitude: null,
+      longitude: null,
+      visitedAt: values.visitedAt,
+    });
+
+  return (
+    <View className="gap-4">
+      <FormField control={control} name="title" label="제목" placeholder="예: 첫 데이트" />
+      <FormField
+        control={control}
+        name="visitedAt"
+        label="날짜"
+        placeholder="2024-05-01"
+        keyboardType="numbers-and-punctuation"
+      />
+      <FormField control={control} name="placeName" label="장소 (선택)" placeholder="예: 성수동" />
+      <FormField
+        control={control}
+        name="description"
+        label="메모 (선택)"
+        placeholder="그날 어땠는지 적어두세요"
+        multiline
+        numberOfLines={4}
+        style={{ minHeight: 96, textAlignVertical: 'top' }}
+      />
+
+      <ErrorText error={error} />
+
+      <Button title={submitLabel} isLoading={isPending} onPress={handleSubmit(submit)} />
+    </View>
+  );
+}
