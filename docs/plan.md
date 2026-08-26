@@ -1,285 +1,282 @@
-# little-pieces 재구축 — rn-template(Expo + Rust Axum) 기반
+# little-pieces 2차 — 사진 업로드 (그리고 한글 경로 정리)
 
 ## Context
 
-`jooyong-boo/little-pieces`는 커플 추억 공유 서비스로 NestJS + Next.js + Prisma 모노레포에서 시작했지만, 도메인 구현이 `Couple 생성` / `내 커플 조회` / `Memory 생성·목록`까지만 있고 **커플 연동(초대) 경로 자체가 없어** 실제로 쓸 수 없는 상태에서 멈춰 있다(마지막 push 2026-03-09).
+1차(인증 + 커플 연동 + 추억 CRUD + 타임라인)는 완료됐다. 커밋 7개가 로컬 `little-pieces` 브랜치에 있고, Rust 20 / jest 16 / API E2E 26 / Maestro 앱 플로우까지 통과했다. (원격 `main`은 아직 NestJS 트리 `6ddfa0d` — 교체는 별건이고 2차 의존성이 아니다.)
 
-그 사이 만든 `jooyong-boo/rn-template`(Expo 57 + expo-router + Axum 0.8 + sqlx)이 인증·CI·린트·테스트까지 갖춰져 있으므로, **웹을 버리고 모바일 앱으로 방향을 바꿔** 이 템플릿 위에 도메인을 다시 얹는다.
+2차는 사진 업로드다. 날짜·장소·메모만 있는 추억은 얇고, 커플 앱에서 사진은 부가 기능이 아니라 본체에 가깝다.
 
-목표: 인증 → 커플 연동 → 추억 등록 → 타임라인이 실제로 도는 MVP.
+**순서를 로드맵과 바꾼 이유**: 검증 가능 범위가 기능마다 다르다.
+
+| 기능       | 시뮬레이터 검증                                                            |
+| ---------- | -------------------------------------------------------------------------- |
+| **이미지** | 전부 가능 (피커 → presigned PUT → 표시). Maestro로도 구동                  |
+| 지도       | iOS는 Apple Maps로 키 없이 렌더. Android는 Google Maps 키 없이는 확인 불가 |
+| 푸시       | EAS `projectId` 필요 + APNs 등록은 시뮬레이터 불가 → 실기기 필요           |
+
+1차에서 실기기 구동이 정적 검사가 전부 통과시킨 버그 3개를 잡았다. 증명 가능한 것부터 가는 게 그 교훈이다. 이미지 → 지도 → 푸시.
 
 ### 확정된 결정
 
-| 항목     | 결정                                                                                     |
-| -------- | ---------------------------------------------------------------------------------------- |
-| 레포     | 기존 `jooyong-boo/little-pieces` 재사용. 기존 main은 `legacy-nest` 브랜치로 보존 후 교체 |
-| 플랫폼   | 모바일 단독. 기존 `apps/web`(Next.js/FSD) 폐기                                           |
-| MVP 범위 | 인증 + 커플 연동 + 추억 CRUD + 타임라인                                                  |
-| 지도     | `react-native-maps` — **2차**. MVP는 좌표만 저장                                         |
-| 이미지   | Cloudflare R2 presigned PUT — **2차**. MVP는 스키마 컬럼만                               |
-| DB       | 로컬 `docker compose up -d db`. 배포처는 MVP 이후 결정                                   |
+| 항목      | 결정                                                                 |
+| --------- | -------------------------------------------------------------------- |
+| 경로      | `개인플젝` → `little-pieces`로 rename. **네이티브 빌드의 선결 조건** |
+| 2차 범위  | 이미지만. 지도·푸시는 각각 별 단계                                   |
+| 스토리지  | S3 호환. 로컬은 **MinIO**(docker), 배포는 R2 — env 3줄 차이          |
+| Rust S3   | `rusty-s3` 0.10.2                                                    |
+| 푸시 검증 | 실기기 iPhone 있음 → 3단계에서 활용                                  |
 
-### 명시적으로 미루는 것 (누락 아님)
+### 검증한 사실 (추측 아님)
 
-예약 발송 편지, 기념일 D-Day **푸시**(둘 다 백그라운드 스케줄러 필요 — MVP에 스케줄러를 넣지 않는 것이 이 선의 이유), 지도 클러스터링, 오프라인 동기화, 홈 위젯, 영상 업로드, AI 앨범 생성.
-
----
-
-## 1단계 — 레포 세팅
-
-1. `~/projects/rn-template`의 파일을 이 워크트리(`/Users/boo/orca/workspaces/개인플젝/little-pieces`)로 복사. **제외**: `.git`, `node_modules`, `target`, `apps/mobile/android`, `apps/mobile/ios`, `apps/mobile/.expo`.
-   - `android/`, `ios/`는 `expo prebuild`로 재생성되는 산출물이고 rn-template에서도 `.gitignore` 대상이다. 복사하면 bundle id가 옛 값으로 굳는다.
-2. `node scripts/setup.js` — 앱 이름 `little-pieces`, slug `little-pieces`, scheme `littlepieces`, bundle id `com.littlepieces.app`로 일괄 치환. (`app.json`, 루트 `package.json`, Maestro flow만 건드림)
-3. `pnpm install`
-4. `cp apps/api/.env.example apps/api/.env` — `query_as!`는 **컴파일 시점**에 `DATABASE_URL`이 필요하므로 이게 없으면 첫 `cargo build`부터 실패한다. `JWT_SECRET`도 여기서 채운다.
-5. remote 연결 + 기존 코드 보존:
-   ```bash
-   git remote add origin https://github.com/jooyong-boo/little-pieces.git
-   # 원격 main SHA를 legacy-nest 브랜치로 백업 (git-workflow.md: 원격 조작은 gh 우선)
-   gh api repos/jooyong-boo/little-pieces/branches/main --jq .commit.sha
-   gh api -X POST repos/jooyong-boo/little-pieces/git/refs \
-     -f ref=refs/heads/legacy-nest -f sha=<위 SHA>
-   ```
-   > `legacy-nest` 생성을 **확인한 뒤에만** main 교체를 진행한다.
-   >
-   > 로컬 히스토리는 원격 main과 무관한 빈 커밋 1개라 main 교체는 기존 원격 브랜치에 대한 force push다. `git-workflow.md` 기준으로 하네스 가드레일이 막는 케이스이므로, `legacy-nest` 확인 후 **사용자가 직접** `! git push origin little-pieces:main --force`를 실행하도록 요청한다.
+- `rusty-s3` 0.10.2 — 기본 feature가 `rustcrypto`(순수 Rust, C 툴체인 불필요)라 sqlx의 `tls-rustls`와 충돌 없음. Sans-IO라 HTTP 클라이언트를 안 끌고 옴. `bucket.put_object(Some(&creds), key).sign(duration)` → presigned URL. MinIO 호환성을 커밋마다 CI로 검증하는 크레이트.
+- `expo-image-picker` 57.0.13 — `launchImageLibraryAsync({ allowsMultipleSelection, selectionLimit, quality, mediaTypes })`. asset에 `uri`, `mimeType?`, `fileName?`, `fileSize?`. **`mimeType`이 optional이라 폴백이 필요하다.**
+- `expo-file-system` 57.0.5 — `new File(uri).upload(url, { httpMethod: 'PUT', headers })`. 기본 `uploadType`이 `BINARY_CONTENT`. **비2xx도 reject가 아니라 resolve하므로 `result.status`를 직접 봐야 한다.** 지금은 transitive 의존성이라 명시적으로 추가해야 함.
+- 플러그인 옵션: `["expo-image-picker", { photosPermission, cameraPermission: false, microphonePermission: false }]` — `false`는 해당 권한을 아예 막는다. 사진 라이브러리만 쓰므로 카메라·마이크는 막는다.
+- CocoaPods 1.16.2, Ruby `default_external`은 이미 UTF-8인데도 실패 → CocoaPods가 명령 출력을 BINARY로 강제하는 것이라 환경변수로는 못 푼다. 경로 변경이 유일한 해법.
 
 ---
 
-## 2단계 — 백엔드 (`apps/api`)
+## 진행 상황 (2026-08-26)
 
-### 2-1. 마이그레이션
+- [x] **1단계 백엔드** — presigned PUT/GET, `image_keys` 마이그레이션, `POST /memories/upload-url`,
+      커플 스코프 키 검증. Rust 테스트 30개, E2E 33개 통과(실제 MinIO 업로드 → 바이트 왕복 비교 →
+      타 커플 키 403 포함).
+- [x] **2단계 모바일 코드** — 피커·업로드·ImageStrip·타임라인 썸네일. typecheck/lint/jest 29개 통과.
+- [ ] **0단계 경로 정리** — 아직. 백엔드와 모바일 코드는 한글 경로에서도 전부 검증됐지만
+      **네이티브 빌드(`pod install`)만 막혀 있어 실기기/시뮬레이터 구동을 못 했다.**
+- [ ] **Maestro 사진 플로우** — 앱을 빌드할 수 있게 된 뒤에 작성한다. 네이티브 사진 피커의
+      실제 레이블을 보지 않고 쓰면 추측이 된다.
 
-`migrations/<ts>_add_nickname.up.sql` — 커플 앱은 "누가 올렸는지"가 보여야 하므로 닉네임이 필수다.
+---
+
+## 0단계 — 한글 경로 정리 (사용자 실행 + 세션 재시작)
+
+이 세션의 작업 디렉터리가 바로 그 한글 경로다. 이름을 바꾸는 순간 셸이 갈 곳을 잃으므로 **내가 실행할 수 없다.** Orca에서 이 프로젝트의 터미널/탭을 닫은 뒤 아래를 한 번에 실행하고, 새 경로에서 Claude Code를 다시 띄운 다음 "계속"이라고 하면 1단계부터 이어간다.
+
+```bash
+mv ~/orca/projects/개인플젝      ~/orca/projects/little-pieces
+mv ~/orca/workspaces/개인플젝    ~/orca/workspaces/little-pieces
+
+# 워크트리 링크는 양방향이다. 한쪽만 고치면 반대쪽이 옛 경로를 가리킨 채 남는다:
+#   <워크트리>/.git                        → projects/.../worktrees/little-pieces
+#   .git/worktrees/little-pieces/gitdir    → <워크트리>/.git
+# 양쪽에서 돌린다. 이미 맞으면 각각 no-op이다.
+git -C ~/orca/projects/little-pieces worktree repair \
+    ~/orca/workspaces/little-pieces/little-pieces
+git -C ~/orca/workspaces/little-pieces/little-pieces worktree repair
+
+cd ~/orca/workspaces/little-pieces/little-pieces
+# pnpm의 hoisted 레이아웃은 .bin 심링크에 절대경로를 굽는다
+rm -rf node_modules apps/mobile/ios apps/mobile/android
+pnpm install
+
+# 검증: 워크트리 자신이 정상인지를 본다.
+# main 쪽 `git worktree list`만 보면 워크트리가 깨져 있어도 멀쩡해 보일 수 있다.
+git status && git log --oneline -1
+```
+
+확인·부작용:
+
+- **Orca**는 `~/orca/projects/*`, `~/orca/workspaces/*` 디렉터리 구조를 그대로 쓴다. 경로가 박힌 건 통계·로그·터미널 히스토리(`~/Library/Application Support/orca/`)뿐이라 이름이 바뀌면 그것만 새로 쌓인다. 별도 레지스트리 수정은 불필요.
+- `target/`은 굳이 지우지 않는다 — cargo가 절대경로를 fingerprint에 포함하므로 필요한 것만 알아서 다시 빌드한다. 빌드가 이상하게 굴면 그때 `rm -rf target`.
+- Claude Code의 프로젝트 키가 바뀌므로 이전 세션 히스토리와 자동 메모리가 새 키로 갈린다. 새 세션이 만드는 디렉터리 이름을 `ls ~/.claude/projects/`로 확인한 뒤 옛 `memory/` 폴더를 그쪽으로 옮긴다(키 인코딩 규칙을 미리 예측하지 말 것).
+- `~/.claude.json`의 옛 경로 항목은 남지만 무해하다.
+- 이후 `apps/mobile/ios`는 `expo run:ios`가 prebuild로 다시 만든다.
+
+**완료 판정**: `cd apps/mobile && npx expo run:ios --device "iPhone 17 Pro"`가 `pod install`을 통과한다. 여기가 막히면 2단계 이후는 검증할 수 없으므로 진행하지 않는다.
+
+---
+
+## 1단계 — 백엔드 스토리지 (`apps/api`)
+
+### 1-1. 의존성 · 설정
+
+`apps/api/Cargo.toml`
+
+```toml
+rusty-s3 = "0.10.2"
+```
+
+기본 feature(`rustcrypto` + `full`) 그대로 간다. `rustcrypto`만 남기면 크레이트 4개(xml/serde_json/md-5/base64)를 덜 받지만, SigV4 서명이 base64를 쓰고 그게 `full` 뒤에 가려져 있어 1단계 첫 빌드부터 깨질 소지가 있다. **일단 돌게 만들고, 트리밍은 통과한 뒤 선택 정리로 남긴다.**
+
+`config.rs` — `Config`에 `s3: Option<S3Config>` 추가. **전부 있으면 `Some`, 하나라도 없으면 `None`.** 스토리지 미설정 상태로도 서버가 뜨고 나머지 기능이 도는 게 중요하다(R2 계정이 아직 없다).
+
+`state.rs` — `AppState`에 `storage: Option<Storage>`.
+
+`.env.example` — MinIO 기준 기본값 + R2 전환 방법을 주석으로:
+
+```
+S3_ENDPOINT=http://localhost:9000
+S3_REGION=auto
+S3_BUCKET=little-pieces
+S3_ACCESS_KEY_ID=minioadmin
+S3_SECRET_ACCESS_KEY=minioadmin
+# R2로 갈 때: endpoint를 https://<account_id>.r2.cloudflarestorage.com 로,
+# 키를 R2 API 토큰으로. region은 auto 그대로. 코드 변경 없음.
+```
+
+`docker-compose.yml` — `minio` 서비스(9000/9001) + `mc mb`로 버킷을 만드는 일회성 `minio-init`. 5432가 이미 점유돼 5433으로 옮겼던 것처럼 9000이 겹치면 포트만 바꾼다.
+
+### 1-2. 마이그레이션
+
+`migrations/<ts>_add_memory_images.up.sql`
 
 ```sql
-ALTER TABLE users ADD COLUMN nickname TEXT NOT NULL DEFAULT '';
+ALTER TABLE memories ADD COLUMN image_keys TEXT[] NOT NULL DEFAULT '{}';
 ```
 
-`migrations/<ts>_create_couples_memories.up.sql`
+1차에서 의도적으로 미뤘던 컬럼이다. `.down.sql`은 `DROP COLUMN`.
 
-```sql
-CREATE TABLE couples (
-    id UUID PRIMARY KEY,
-    name TEXT NOT NULL,
-    anniversary_date DATE,
-    invite_code TEXT NOT NULL UNIQUE,
-    created_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+### 1-3. `apps/api/src/storage.rs` (신규)
 
-CREATE TABLE couple_members (
-    couple_id UUID NOT NULL REFERENCES couples(id) ON DELETE CASCADE,
-    -- 한 유저는 한 커플에만. 기존 NestJS는 findFirst 체크로 했는데 동시 요청에 뚫린다.
-    -- DB 제약으로 옮기면 모든 경로가 한 번에 막힌다.
-    user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
-    role TEXT NOT NULL DEFAULT 'member',
-    joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (couple_id, user_id)
-);
+`UrlStyle::Path`를 쓴다 — MinIO는 path-style이 필요하고 R2도 지원하므로 한 설정으로 둘 다 커버된다.
 
-CREATE TABLE memories (
-    id UUID PRIMARY KEY,
-    couple_id UUID NOT NULL REFERENCES couples(id) ON DELETE CASCADE,
-    author_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-    title TEXT NOT NULL,
-    description TEXT,
-    place_name TEXT,
-    latitude DOUBLE PRECISION,   -- 위치 없는 추억도 허용하므로 nullable (2차 지도에서 사용)
-    longitude DOUBLE PRECISION,
-    visited_at DATE NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX memories_couple_visited_idx ON memories (couple_id, visited_at DESC);
+```rust
+pub struct Storage { bucket: Bucket, credentials: Credentials, url_ttl: Duration }
+
+impl Storage {
+    pub fn from_env() -> Option<Self>
+    pub fn presign_put(&self, key: &str) -> String
+    pub fn presign_get(&self, key: &str) -> String
+}
+
+// 순수 함수 — 신뢰 경계 두 곳
+pub fn image_key(couple_id: Uuid, content_type: &str) -> Result<String, AppError>
+pub fn is_owned_by(couple_id: Uuid, key: &str) -> bool
 ```
 
-대응하는 `.down.sql`도 함께 작성(rn-template 규칙: `migrations/*.up.sql` / `*.down.sql` 쌍).
+**`image_key`** — content type 허용 목록으로만 확장자를 정한다(`image/jpeg`→`jpg`, `image/png`→`png`, `image/webp`→`webp`, `image/heic`→`heic`). 그 밖은 `UnsupportedImageType`. 키는 `couples/{couple_id}/{uuid}.{ext}` — **서버가 만든다.** 클라이언트가 키를 정하면 남의 객체를 덮어쓸 수 있다.
 
-> ID는 UUID. 기존 Prisma 스키마는 cuid 문자열이었지만 rn-template의 `users.id`가 `Uuid`이므로 거기에 맞춘다.
+**`is_owned_by`** — 여기가 이 단계에서 가장 중요한 검사다. 추억을 저장할 때 클라이언트가 보낸 `imageKeys`를 그대로 믿으면, A가 B 커플의 키를 적어 넣고 우리가 발급하는 presigned GET으로 남의 사진을 읽을 수 있다. `starts_with(prefix)`로 끝내지 않고 **`couples/<uuid>/<uuid>.<ext>` 형식을 정확히 파싱해서** 커플 ID가 일치하는지 본다(형식이 고정이라 `..` 같은 게 끼어들 여지가 없다).
 
-### 2-2. 인증 추출기 — 기존 코드의 실제 문제부터 고친다
+두 함수 모두 단위 테스트: 허용/거부 content type, 남의 커플 키, `..`가 섞인 키, 접두사만 비슷한 키(`couples/{id}x/...`), 확장자 없는 키.
 
-`apps/api/src/auth/handlers.rs:74-90`의 `me`는 Authorization 헤더를 **핸들러 안에서 직접 파싱**한다. 앞으로 추가할 커플·추억 엔드포인트 8개가 전부 같은 코드를 필요로 하므로, 복사하지 말고 추출기로 뽑는다.
+`error.rs`에 variant 추가: `StorageUnavailable`(503), `UnsupportedImageType`(400), `ForeignImageKey`(403).
 
-**신규 `apps/api/src/auth/extractor.rs`**
+### 1-4. 엔드포인트와 응답
 
-- `struct AuthUser { user_id: Uuid }` — `impl FromRequestParts<AppState>`. 헤더 파싱 + `jwt::verify`. 실패 시 `AppError::InvalidCredentials`.
-- `struct CoupleMember { user_id: Uuid, couple_id: Uuid }` — `AuthUser`를 거친 뒤 `couple_members`를 조회. 커플 미소속이면 `AppError::NoCouple`(신규 variant → 403).
-  - memories 핸들러 5개가 전부 `couple_id`를 필요로 하므로, 헬퍼 함수보다 추출기가 이긴다.
-- `me` 핸들러를 `AuthUser`를 쓰도록 리팩터 — 새 경로만 고치고 기존 파싱을 남겨두면 같은 로직이 두 벌이 된다.
+**`POST /memories/upload-url`** — `CoupleMember`, body `{ contentType }`, 응답 `{ key, uploadUrl, expiresInSeconds }`.
 
-**어느 엔드포인트가 어느 추출기를 쓰는지가 중요하다.** 커플이 아직 없는 유저도 `POST /couples`, `POST /couples/join`, `GET /couples/me`를 호출할 수 있어야 하므로 이 셋은 `AuthUser`다. `CoupleMember`를 쓰면 신규 유저가 온보딩을 시작할 방법이 없어진다.
+메모리 ID를 요구하지 않는 게 핵심이다. 신규 작성 화면에서는 추억이 아직 없으므로, ID를 요구하면 "추억 먼저 만들고 → 업로드 → 다시 수정" 3단이 된다. 커플 스코프 키만 있으면 신규·수정이 같은 경로를 쓴다.
 
-| 추출기         | 엔드포인트                                                               |
-| -------------- | ------------------------------------------------------------------------ |
-| `AuthUser`     | `GET /auth/me`, `POST /couples`, `POST /couples/join`, `GET /couples/me` |
-| `CoupleMember` | `PATCH /couples/me`, `/memories` 전부                                    |
+`memories/repo.rs`
 
-`apps/api/src/error.rs`에 variant 추가: `NoCouple`(403), `AlreadyInCouple`(409), `InviteNotFound`(404), `CoupleFull`(409), `NotFound`(404).
+- `MemoryView`에 `image_keys: Vec<String>`(수정 화면 왕복용) + `image_urls: Vec<String>`(presigned GET, 표시용) 추가. R2/MinIO 버킷은 비공개라 표시에도 서명이 필요하다. 스토리지 미설정이면 `image_urls`는 빈 배열.
+- `MemoryInput`에 `image_keys: Vec<String>`.
 
-### 2-3. 도메인 모듈
+`memories/handlers.rs` — `MemoryRequest`에 `imageKeys: Option<Vec<String>>`. `to_input`에서 최대 10장 제한 + 전 항목 `is_owned_by` 검사.
 
-`apps/api/src/users.rs`와 같은 "얇은 함수 + `sqlx::query_as!`" 스타일을 그대로 따른다(레이어 추가 금지).
+`routes.rs`에 라우트 하나 추가.
 
-**`apps/api/src/couples/`** — `mod.rs`, `handlers.rs`, `repo.rs`
+### 1-5. E2E 확장 (`apps/api/scripts/e2e.sh`)
 
-| 엔드포인트           | 동작                                                                              |
-| -------------------- | --------------------------------------------------------------------------------- |
-| `POST /couples`      | 커플 생성 + 생성자를 owner로 가입 + `invite_code` 발급. 한 트랜잭션.              |
-| `GET /couples/me`    | 내 커플 + 멤버(닉네임 포함) + `invite_code`. **커플이 없으면 200 + `data: null`** |
-| `POST /couples/join` | `{ invite_code }` → 해당 커플에 member로 가입                                     |
-| `PATCH /couples/me`  | `name`, `anniversary_date` 수정                                                   |
+기존 26개 체크에 이어서:
 
-- **`GET /couples/me`가 커플 없음을 에러로 내면 안 된다.** 신규 유저의 정상 상태가 매번 HTTP 에러가 되고, TanStack Query가 기본 3회 재시도 + 백오프를 돌려 온보딩이 필요한 유저에게만 콜드 스타트가 몇 초씩 늘어난다. 토큰 만료(401)와도 구분이 안 된다. `data: null`로 내려서 앱이 `data === null → 온보딩`으로 분기하게 한다.
-- 초대 코드: 대문자+숫자 6자리. `couple_members.user_id`/`couples.invite_code`의 UNIQUE 위반을 `sqlx::Error::Database(e) if e.is_unique_violation()`로 잡아 각각 `AlreadyInCouple` / 코드 재생성으로 매핑. 재생성은 3회까지.
-- join 시 정원(2명) 확인. 카운트 후 INSERT는 같은 코드를 동시에 입력하면 둘 다 1을 보는 TOCTOU라, 트랜잭션 안에서 `SELECT id FROM couples WHERE id = $1 FOR UPDATE`로 잠근 뒤 센다. 초과면 `CoupleFull`.
-
-**`apps/api/src/memories/`** — `mod.rs`, `handlers.rs`, `repo.rs`
-
-| 엔드포인트             | 동작                                                             |
-| ---------------------- | ---------------------------------------------------------------- |
-| `POST /memories`       | `CoupleMember` 추출기가 소속을 보장. `author_user_id`는 토큰에서 |
-| `GET /memories`        | 내 커플 것만, `ORDER BY visited_at DESC, created_at DESC`        |
-| `GET /memories/:id`    | 내 커플 것이 아니면 `NotFound` (존재 여부를 흘리지 않음)         |
-| `PATCH /memories/:id`  | 위와 동일한 소유권 확인                                          |
-| `DELETE /memories/:id` | 위와 동일                                                        |
-
-- 소유권 체크는 `WHERE id = $1 AND couple_id = $2`로 쿼리 자체에 넣는다. 별도 조회 후 비교하면 TOCTOU가 생기고 코드도 늘어난다.
-- 검증: `title` 1~120자, `description` ≤ 500자, 위경도가 오면 범위 체크. `auth/handlers.rs`의 `validate_credentials`와 같은 순수 함수 + 단위 테스트 스타일로.
-
-**`apps/api/src/routes.rs`** — 위 9개 라우트 등록. 기존 구조 유지.
-
-**`signup` 확장**: `SignupRequest`에 `nickname` 추가(1~20자 검증), `users::create` 시그니처에 반영.
-
-### 2-4. sqlx 컴파일타임 매크로 주의
-
-`query_as!`는 빌드 시 살아있는 DB가 필요하다. 로컬은 `docker compose up -d db` 후 `.env`의 `DATABASE_URL`, CI는 `.github/workflows/ci.yml`의 `api` job이 이미 Postgres 서비스 + `sqlx migrate run`을 돌리므로 **추가 설정 불필요**. (`.sqlx` 오프라인 캐시는 지금 필요 없음)
+1. `POST /memories/upload-url`로 URL 받기
+2. 받은 URL에 `curl -X PUT --upload-file`로 실제 이미지 바이트 업로드 → 2xx
+3. 그 키로 추억 저장 → `imageKeys`에 반영
+4. 응답의 `imageUrls[0]`를 `curl`로 GET → 업로드한 바이트와 **동일한지 비교**
+5. 허용되지 않는 `contentType`(`application/pdf`) → 400
+6. **다른 커플의 키를 넣어 저장 시도 → 403** (`is_owned_by`가 실제로 막는지)
 
 ---
 
-## 3단계 — 모바일 (`apps/mobile`)
+## 2단계 — 모바일 (`apps/mobile`)
 
-### 3-1. 공통 API 클라이언트 — 기존 파일을 일반화
-
-`src/lib/auth-api.ts`에 이미 `{ success, data, error }` envelope 파싱 + zod 검증 로직이 있다. 이걸 **새 파일로 복사하지 말고** 뽑아낸다.
-
-**신규 `src/lib/api-client.ts`**
-
-- `request<T>(path, { method, body, schema })` — envelope 파싱, 에러 메시지 추출, zod 검증까지 한 곳에서. `auth-api.ts`의 `postAuth`가 이걸 쓰도록 리팩터.
-- 토큰 자동 첨부: `useAuthStore.getState().token`.
-
-**`src/lib/auth-store.ts` 수정**: 지금은 `isAuthenticated`만 들고 있고 토큰은 SecureStore에만 있다. 매 요청마다 SecureStore를 읽는 건 느리므로 스토어에 `token: string | null`을 함께 둔다(`hydrate`/`login`/`logout` 모두 갱신). SecureStore는 계속 영속 계층으로 유지.
-
-**신규 `src/lib/couple-api.ts`, `src/lib/memory-api.ts`** — zod 스키마 + `request()` 호출만. 얇게.
-
-### 3-2. 라우팅
-
-`src/app/_layout.tsx`의 `Stack.Protected` 패턴을 그대로 확장한다. 커플 소속 여부라는 **세 번째 상태**가 생기므로:
+### 2-1. 의존성 · 권한
 
 ```
-(auth)/          — 로그인·회원가입 (isAuthenticated === false)
-(onboarding)/    — 커플 생성 / 초대코드 입력 (인증 O, 커플 X)
-(app)/           — 타임라인 / 추억작성 / 설정 (인증 O, 커플 O)
+pnpm --filter mobile add expo-image-picker expo-file-system
 ```
 
-- 커플 소속 여부는 `GET /couples/me`를 TanStack Query로 조회해 판단. `useCouple()` 훅 하나로 감싼다. 응답 zod 스키마는 `.nullable()` — `data === null`이면 온보딩, 에러 경로 없음.
-- 로딩 중에는 스플래시 유지 — 기존 `AnimatedSplashOverlay` + `SplashScreen.preventAutoHideAsync()` 흐름 재사용.
+`app.json` plugins에 추가:
 
-### 3-3. 화면
+```json
+[
+  "expo-image-picker",
+  {
+    "photosPermission": "추억에 사진을 넣으려면 사진 접근 권한이 필요해요.",
+    "cameraPermission": false,
+    "microphonePermission": false
+  }
+]
+```
 
-| 경로                             | 내용                                                                                             |
-| -------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `(auth)/login.tsx`, `signup.tsx` | 기존 파일 유지. signup에 닉네임 필드 추가                                                        |
-| `(onboarding)/index.tsx`         | "커플 만들기" / "초대코드로 참여" 분기                                                           |
-| `(onboarding)/create.tsx`        | 커플 이름 + 기념일 → 생성 후 초대코드 표시·공유                                                  |
-| `(onboarding)/join.tsx`          | 6자리 코드 입력                                                                                  |
-| `(app)/index.tsx`                | **타임라인** — `visited_at` 기준 목록, 날짜 헤더로 그룹핑, 작성자 닉네임                         |
-| `(app)/memory/new.tsx`           | 추억 작성 — 제목/설명/방문일/장소명                                                              |
-| `(app)/memory/[id].tsx`          | 상세 + 수정/삭제                                                                                 |
-| `(app)/settings.tsx`             | 커플 정보, **D-Day 카운터**(`anniversary_date` 클라이언트 계산 — 백엔드 0줄), 초대코드, 로그아웃 |
+카메라·마이크는 쓰지 않으므로 `false`로 아예 막는다.
 
-- 폼은 전부 기존 스택 그대로: `react-hook-form` + `@hookform/resolvers` + zod.
-- 스타일은 NativeWind. `src/components/themed-text.tsx` / `themed-view.tsx` 재사용.
-- 탭 바는 기존 `src/components/app-tabs.tsx`를 타임라인/작성/설정 3탭으로 수정.
-- 뮤테이션 후 `queryClient.invalidateQueries({ queryKey: ['memories'] })`로 갱신.
+### 2-2. `src/lib/image-upload.ts` (신규)
 
-### 3-4. 정리
+```ts
+pickImages(remainingSlots: number): Promise<PickedImage[]>   // launchImageLibraryAsync
+uploadPickedImage(image: PickedImage): Promise<string>        // → 서버 키
+resolveMimeType(image): string                               // 순수 함수 + 테스트
+```
 
-`(app)/explore.tsx`, `src/components/web-badge.tsx`, `hint-row.tsx` 등 템플릿 데모 잔재는 삭제한다.
+- `launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit, quality: 0.7 })`. 휴대폰 사진은 3~5MB라 `quality`로 줄인다.
+- **`asset.mimeType`은 optional이다.** `fileName` 확장자 → 그것도 없으면 `image/jpeg`로 폴백하는 순수 함수를 두고 테스트한다. 서버가 content type을 허용 목록으로 검사하므로 여기서 틀리면 400이 난다.
+- 업로드는 `new File(asset.uri).upload(uploadUrl, { httpMethod: 'PUT', headers: { 'Content-Type': mime } })`. **비2xx도 resolve하므로 `result.status`를 직접 확인하고 실패를 throw한다** — 안 하면 업로드 실패가 조용히 성공으로 넘어간다.
+- `memory-api.ts`에 `requestImageUploadUrl(contentType)` 추가 — 기존 `request()` 재사용.
+
+### 2-3. 업로드 시점
+
+**고른 즉시 업로드한다.** 저장 버튼이 즉시 끝나고 진행 상태를 사진별로 보여줄 수 있다. 대가는 사용자가 작성을 취소했을 때 남는 고아 객체인데, 정리 잡 없이 그냥 둔다(아래 "미루는 것").
+
+### 2-4. 화면
+
+- **`src/components/image-strip.tsx`** (신규) — 썸네일 가로 목록 + `+` 추가 + 각 항목 제거. 업로드 중 스피너, 실패 시 재시도. `expo-image`(이미 의존성)로 표시.
+- **`memory-form.tsx`** — `imageKeys` 상태를 들고 `ImageStrip`을 붙인다. 추가/제거는 순수 리듀서 함수로 빼고 테스트한다(10장 상한, 중복 방지).
+- **`(tabs)/index.tsx`** — 행에 첫 사진 썸네일. `memoryLabel()`에 "사진 N장"을 더해 스크린리더가 사진 유무를 알 수 있게 한다.
+- **`memory/[id].tsx`** — 사진 가로 스크롤 + 수정 시 `ImageStrip` 재사용.
+
+### 2-5. Maestro 플로우
+
+시뮬레이터 사진 라이브러리는 기본이 비어 있다. `xcrun simctl addmedia booted <파일>`로 먼저 씨딩한다.
+
+`apps/mobile/.maestro/memory-with-image.yaml` (신규) — 기존 `signup-to-memory.yaml`은 그대로 두고, 사진 경로만 별도 플로우로. 네이티브 사진 피커 모달을 거치므로 실패 지점이 다르다.
 
 ---
 
-## 4단계 — 문서
+## 미루는 것 (누락 아님)
 
-- **`docs/plan.md`에 이 계획서를 그대로 커밋한다.** 1단계 레포 세팅 직후, 코드보다 먼저. 아래 "재검토 항목"을 여기서 계속 갱신하면서 진행 상황과 결정 변경 이력을 남긴다. (기존 little-pieces가 `PLANS.md`를 두던 자리)
-- 루트 `README.md`를 little-pieces 기준으로 다시 씀(구조, 실행법, 엔드포인트 목록, 2차 로드맵).
-- `apps/mobile/AGENTS.md`(Expo 버전 문서 링크)는 그대로 유지.
+- **고아 객체 정리** — 작성 취소/사진 제거 시 R2 객체가 남는다. 개인 프로젝트 규모에서 무의미한 비용이고, 정리 잡은 스케줄러를 부른다. 지금은 남긴다.
+- **`POST /memories/upload-url` 레이트 리밋** — 호출마다 우리 버킷으로 쓸 수 있는 서명 URL이 하나 발급된다. 두 명이 쓰는 앱이라 실제 위협은 아니지만, 인증된 유저가 반복 호출해 객체를 무한정 넣을 수 있는 구조인 건 사실이다. 공개 서비스로 갈 때 커플당 시간당 상한을 건다.
+- 서버측 썸네일 생성/리사이즈 — `quality: 0.7`로 1차 완화.
+- 여러 장 동시 업로드 진행률 합산 UI — 사진별 상태만 보여준다.
+- 이미지 순서 재배치.
 
 ---
-
-## 재검토 항목
-
-MVP 구현 중 결정한 것과, 아직 열려 있는 것.
-
-### 결정됨
-
-- [x] `legacy-nest` 백업 브랜치 생성 확인 (`6ddfa0d`, 원격 main과 동일 SHA)
-- [x] `.gitignore`에 `apps/api/.env` 포함 확인 (rn-template 기본값에 이미 있음)
-- [x] `users.nickname`은 DEFAULT 없이 `NOT NULL` — 새 DB 기준이라 기본값이 필요 없다
-- [x] **커플 나가기를 MVP에 포함** (`DELETE /couples/me`). 잘못된 코드로 연결하면 되돌릴 길이 없어 실사용 첫 단계에서 막힌다. 마지막 멤버가 나가면 커플과 추억까지 정리
-- [x] `visited_at`은 `DATE` — "이 날 여기 갔었다"의 단위가 날짜이고, TIMESTAMPTZ면 KST 밤에 올린 추억이 UTC 기준 전날로 밀린다
-- [x] 401 처리 — `api-client.ts`가 **토큰을 붙여 보낸 요청**의 401에서만 자동 로그아웃. 토큰 없이 받은 401은 자격증명 오류라 로그아웃할 게 없다
-- [x] 로컬 DB 포트 5433 — 5432는 rn-template의 db 컨테이너가 점유 중이었다
-- [x] 응답/요청 필드는 camelCase (`#[serde(rename_all)]`) — 모바일 zod 스키마가 그대로 읽힌다
-
-### 남은 것
-
-- [ ] **워크스페이스 경로에 한글이 있으면 `pod install`이 실패해 iOS 빌드만 막힌다** (`cargo`/jest/typecheck/lint/`expo export`/E2E는 한글 경로에서도 정상). 현재 경로가 `~/orca/workspaces/개인플젝/little-pieces`이고, `hermes-engine.podspec`에서 `incompatible character encodings: BINARY (ASCII-8BIT) and UTF-8`로 죽는다. CocoaPods가 `Pod::Executable.execute_command` 출력(ASCII-8BIT)을 UTF-8 경로와 이어붙이다 터지는 것이고, `LANG`/`RUBYOPT`로는 해결되지 않았다. ASCII 경로에 복사하면 즉시 통과한다 — 워크스페이스를 ASCII 경로로 옮기는 게 유일한 실질 해법
-- [ ] **초대 코드 만료(TTL)** — 지금은 무기한이라 코드가 영구 노출된다. 커플이 채워진 뒤에는 코드를 무효화하거나 재발급 기능을 두는 편이 낫다
-- [ ] **날짜 입력이 텍스트** — `YYYY-MM-DD`를 직접 타이핑한다. `@react-native-community/datetimepicker`나 Expo의 네이티브 피커로 바꿀 것 (의존성이 늘어 MVP에서는 뺐다)
-- [ ] **Android 탭 아이콘** — `NativeTabs.Trigger.Icon`에 iOS SF Symbol만 지정했다. Android는 `drawable` 리소스가 필요해 지금은 라벨만 나온다
-- [ ] **스플래시/아이콘 에셋이 Expo 기본값** — `assets/images/expo-logo.png` 등이 그대로다. 브랜딩 작업 필요
-- [ ] **다크 모드** — 화면들이 `bg-white` 기준 라이트 전용이다. 템플릿 데모를 지우면서 `ThemedText`/`ThemedView`도 함께 정리했으므로, 도입한다면 NativeWind `dark:` 변형으로 일관되게
-- [ ] **타임라인 페이지네이션** — 지금은 전체 조회. 추억이 수백 개가 되면 `useInfiniteQuery` + `LIMIT/OFFSET`
-- [ ] **초대 코드 딥링크** — `littlepieces://join?code=` 로 상대가 바로 열 수 있게. 지금은 RN `Share`로 텍스트만 보낸다
-- [ ] **DB/API 배포처** — Supabase(Storage 묶기 쉬움) vs Neon(scale-to-zero). `DATABASE_URL` 교체로 끝나므로 급하지 않다
-- [ ] **EAS 빌드 프로필** — `apps/mobile/eas.json`은 아직 골격만 있다
 
 ## 검증
 
-각 단계가 끝날 때마다:
-
 ```bash
+# 0단계 완료 판정 (여기가 막히면 진행 안 함)
+cd apps/mobile && npx expo run:ios --device "iPhone 17 Pro"
+
 # 백엔드
-docker compose up -d db
-pnpm api:dev                 # 최초 실행 시 마이그레이션 자동 적용
+docker compose up -d db minio
 cd apps/api && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
+./apps/api/scripts/e2e.sh        # 기존 26개 + 이미지 6개
 
 # 모바일
-pnpm --filter mobile typecheck
-pnpm --filter mobile lint
-pnpm --filter mobile test
-pnpm --filter mobile format:check
+pnpm --filter mobile typecheck && pnpm --filter mobile lint
+pnpm --filter mobile test && pnpm --filter mobile format:check
+
+# 앱 실제 구동
+xcrun simctl addmedia booted <테스트이미지.jpg>
+maestro test -e EMAIL="me-$(date +%s)@test.com" apps/mobile/.maestro/signup-to-memory.yaml
+maestro test -e EMAIL="me-$(date +%s)@test.com" apps/mobile/.maestro/memory-with-image.yaml
 ```
 
-**엔드투엔드 시나리오** (curl 스크립트 한 개로 자동화 — 커플 연동은 계정 2개가 필요해 수동으로 하기 번거롭다):
+E2E에서 반드시 통과해야 하는 두 가지:
 
-1. A 회원가입 → 토큰
-2. A가 `POST /couples` → `invite_code` 획득
-3. B 회원가입 → 토큰
-4. B가 `POST /couples/join`으로 코드 입력 → 성공
-5. B가 다시 join 시도 → **409** (`user_id` UNIQUE 제약 확인)
-6. A가 `POST /memories` → B가 `GET /memories`로 **보임** 확인
-7. C 회원가입 → C가 **자기 커플을 생성** → C가 `GET /memories/:id`(A의 추억) → **404**
-   - C가 커플 없이 호출하면 `CoupleMember` 추출기가 403으로 먼저 막아 정작 검증하려던 걸 못 본다. 커플을 만들어야 `WHERE id = $1 AND couple_id = $2`가 실제로 격리하는지 확인된다.
+- **업로드한 바이트와 presigned GET으로 받은 바이트가 같다** — 서명·헤더·content type이 모두 맞았다는 유일한 증거
+- **다른 커플의 키로 저장 시도가 403** — 이게 뚫리면 남의 사진을 읽을 수 있다
 
-**앱 확인**: `pnpm --filter mobile ios`(dev client 필요 — `react-native-mmkv` 때문에 Expo Go 불가)로 회원가입 → 커플 생성 → 추억 등록 → 타임라인 표시까지 직접 확인.
+작업 중 `docs/plan.md`를 갱신한다(2차 진행 상황 + 남은 재검토 항목).
 
 ---
 
-## 2차 이후 로드맵
+## 다음 단계 (2차 이후)
 
-1. **지도** — `react-native-maps` + Android용 Google Maps API 키. `latitude/longitude`는 이미 저장 중. 작성 화면에 위치 선택 추가.
-2. **이미지** — R2 presigned PUT. `POST /memories/:id/upload-url`이 서명한 URL을 주고 앱이 R2로 직접 PUT. 서버는 바이트를 만지지 않음. `memories.image_keys TEXT[]` 컬럼은 이때 마이그레이션으로 추가(MVP에서 미리 만들지 않는다 — 안 쓰는 컬럼이 모든 `query_as!`에 `Vec<String>` 매핑을 강요한다).
-3. **푸시** — `expo-notifications` + `push_tokens` 테이블. 파트너가 추억을 올릴 때 Expo Push API로 POST(요청 스코프라 스케줄러 불필요).
-4. **"n년 전 오늘"** — `EXTRACT(MONTH FROM visited_at)` 쿼리 하나. 3번의 푸시 경로 재사용.
+3. **지도** — `react-native-maps@1.29.0`(peer `react-native >= 0.76`, 우리 0.86 OK). `latitude/longitude`는 이미 저장 중. iOS는 Apple Maps로 키 없이 확인 가능, Android는 Google Maps 키 필요.
+4. **푸시** — `expo-notifications@57.0.14` + `push_tokens` 테이블 + Expo Push API. **EAS `projectId`를 먼저 만들어야 한다**(`app.json`에 `extra`가 없음). 실기기 iPhone으로 검증. "n년 전 오늘"(`EXTRACT`)은 이 배달 경로를 재사용하는 곁가지.
