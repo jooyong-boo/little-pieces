@@ -6,7 +6,6 @@ import { Button } from '@/components/button';
 import { ErrorText } from '@/components/error-text';
 import { MemoryForm } from '@/components/memory-form';
 import { useDeleteMemory, useMemory, useUpdateMemory } from '@/hooks/use-memories';
-import { formatKoreanDate } from '@/lib/timeline';
 
 export default function MemoryDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -35,8 +34,7 @@ export default function MemoryDetailScreen() {
         {query.data ? (
           <>
             <Text className="text-sm text-gray-500">
-              {query.data.authorNickname ?? '알 수 없음'} · {formatKoreanDate(query.data.createdAt)}{' '}
-              기록
+              {query.data.authorNickname ?? '알 수 없음'} 기록
             </Text>
 
             <MemoryForm

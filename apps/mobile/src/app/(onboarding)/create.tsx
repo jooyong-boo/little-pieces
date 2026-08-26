@@ -28,15 +28,13 @@ export default function CreateCoupleScreen() {
     defaultValues: { name: '', anniversaryDate: '' },
   });
 
+  // 성공하면 커플 쿼리가 갱신되고 루트 가드가 (app)으로 옮겨준다.
+  // 초대 코드는 타임라인 상단 배너가 이어서 보여준다.
   const onSubmit = (values: CreateForm) =>
-    mutation.mutate(
-      {
-        name: values.name,
-        anniversaryDate: values.anniversaryDate === '' ? null : values.anniversaryDate,
-      },
-      // 생성 직후엔 초대 코드를 보여줘야 하므로 설정 화면으로 보낸다.
-      { onSuccess: () => router.replace('/settings') },
-    );
+    mutation.mutate({
+      name: values.name,
+      anniversaryDate: values.anniversaryDate === '' ? null : values.anniversaryDate,
+    });
 
   return (
     <View className="flex-1 justify-center gap-4 bg-white px-6">

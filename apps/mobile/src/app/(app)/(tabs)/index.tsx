@@ -1,9 +1,10 @@
 import { Link } from 'expo-router';
-import { ActivityIndicator, SectionList, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, SectionList, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
 import { ErrorText } from '@/components/error-text';
+import { useCouple } from '@/hooks/use-couple';
 import { useMemories } from '@/hooks/use-memories';
 import type { Memory } from '@/lib/memory-api';
 import { formatKoreanDate, groupMemoriesByDate } from '@/lib/timeline';
@@ -20,6 +21,8 @@ export default function TimelineScreen() {
           <Text className="text-base font-semibold text-blue-600">+ 추가</Text>
         </Link>
       </View>
+
+      <WaitingForPartner />
 
       {isPending ? <ActivityIndicator className="mt-8" /> : null}
 
@@ -48,10 +51,25 @@ export default function TimelineScreen() {
   );
 }
 
+/** 커플 생성 직후엔 상대가 아직 없다. 초대 코드를 찾아 설정 탭까지 가지 않아도 되게 여기 띄운다. */
+function WaitingForPartner() {
+  const { data: couple } = useCouple();
+  if (!couple || couple.members.length >= 2) return null;
+
+  return (
+    <View className="mx-6 mb-2 gap-1 rounded-xl bg-blue-50 p-4">
+      <Text className="text-sm text-blue-700">상대를 기다리는 중이에요</Text>
+      <Text className="text-2xl font-bold tracking-widest text-blue-700">{couple.inviteCode}</Text>
+      <Text className="text-sm text-blue-600">이 코드를 알려주면 연결됩니다.</Text>
+    </View>
+  );
+}
+
 function MemoryRow({ memory }: { memory: Memory }) {
   return (
+    // Link asChild는 자식에 onPress를 넣는다. View는 onPress를 무시하므로 Pressable이어야 한다.
     <Link href={{ pathname: '/memory/[id]', params: { id: memory.id } }} asChild>
-      <View className="rounded-xl border border-gray-200 p-4">
+      <Pressable className="rounded-xl border border-gray-200 p-4">
         <Text className="text-base font-semibold">{memory.title}</Text>
         {memory.placeName ? (
           <Text className="mt-1 text-sm text-gray-600">📍 {memory.placeName}</Text>
@@ -64,7 +82,7 @@ function MemoryRow({ memory }: { memory: Memory }) {
         {memory.authorNickname ? (
           <Text className="mt-2 text-xs text-gray-400">{memory.authorNickname}</Text>
         ) : null}
-      </View>
+      </Pressable>
     </Link>
   );
 }
