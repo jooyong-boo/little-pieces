@@ -65,11 +65,25 @@ function WaitingForPartner() {
   );
 }
 
+/**
+ * 스크린리더는 Pressable의 자식 텍스트를 이어붙여 한 덩어리로 읽는다.
+ * 그대로 두면 "📍"까지 읽히므로 라벨을 직접 준다.
+ */
+function memoryLabel(memory: Memory) {
+  return [memory.title, memory.placeName, memory.authorNickname && `${memory.authorNickname} 기록`]
+    .filter(Boolean)
+    .join(', ');
+}
+
 function MemoryRow({ memory }: { memory: Memory }) {
   return (
     // Link asChild는 자식에 onPress를 넣는다. View는 onPress를 무시하므로 Pressable이어야 한다.
     <Link href={{ pathname: '/memory/[id]', params: { id: memory.id } }} asChild>
-      <Pressable className="rounded-xl border border-gray-200 p-4">
+      <Pressable
+        className="rounded-xl border border-gray-200 p-4"
+        accessibilityRole="button"
+        accessibilityLabel={memoryLabel(memory)}
+      >
         <Text className="text-base font-semibold">{memory.title}</Text>
         {memory.placeName ? (
           <Text className="mt-1 text-sm text-gray-600">📍 {memory.placeName}</Text>

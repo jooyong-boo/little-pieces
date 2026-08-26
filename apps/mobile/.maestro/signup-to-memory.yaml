@@ -1,22 +1,39 @@
 # 회원가입 → 커플 생성 → 추억 등록까지, 앱에서 실제로 도는지 본다.
 # 백엔드가 떠 있어야 한다: docker compose up -d db && pnpm api:dev
 #
-#   maestro test apps/mobile/.maestro/signup-to-memory.yaml
+#   maestro test -e EMAIL="me-$(date +%s)@test.com" apps/mobile/.maestro/signup-to-memory.yaml
 appId: com.littlepieces.app
 ---
 - launchApp:
     clearState: true
 
+# clearState는 iOS Keychain을 지우지 않아 이전 실행의 토큰이 남는다
+# (재설치해도 로그인이 유지되는 실제 동작). 남아 있으면 먼저 로그아웃한다.
+- runFlow:
+    when:
+      visible: '우리의 조각들'
+    commands:
+      - tapOn: '설정'
+      - scrollUntilVisible:
+          element:
+            text: '로그아웃'
+      - tapOn: '로그아웃'
+- runFlow:
+    when:
+      visible: '둘만의 공간 만들기'
+    commands:
+      - tapOn: '로그아웃'
+
 - assertVisible: '로그인'
 - tapOn: '계정이 없으신가요? 회원가입'
 
 - tapOn: '이메일'
-- inputText: 'maestro-${maestro.startTime}@test.com'
+- inputText: '${EMAIL}'
 - tapOn: '비밀번호'
 - inputText: 'password123'
 - tapOn: '닉네임'
 - inputText: '테스터'
-- hideKeyboard
+- tapOn: '회원가입'
 - tapOn: '가입하기'
 
 # 커플이 없으면 온보딩으로 간다.
@@ -25,7 +42,7 @@ appId: com.littlepieces.app
 
 - tapOn: '예: 우리 둘'
 - inputText: '우리'
-- hideKeyboard
+- tapOn: '공간 만들기'
 - tapOn: '만들기'
 
 # 커플이 생기면 가드가 타임라인으로 옮겨준다.
@@ -40,17 +57,24 @@ appId: com.littlepieces.app
 - inputText: '첫 산책'
 - tapOn: '예: 성수동'
 - inputText: '한강'
-- hideKeyboard
+- tapOn: '추억 남기기'
 - tapOn: '저장'
 
-# 타임라인에 반영된다.
-- assertVisible: '첫 산책'
-- assertVisible: '📍 한강'
+# 타임라인에 반영된다. 모달이 닫히고 목록이 다시 불려오기까지 잠깐 걸린다.
+- extendedWaitUntil:
+    visible: '.*첫 산책.*'
+    timeout: 10000
+# 행 전체가 접근성 요소 하나로 합쳐지므로 제목·장소·작성자를 한 번에 확인한다.
+- assertVisible: '첫 산책, 한강, 테스터 기록'
 
 # 행을 눌러 상세로 — Pressable이 아니면 여기서 멈춘다.
-- tapOn: '첫 산책'
+- tapOn: '첫 산책, 한강, 테스터 기록'
 - assertVisible: '추억 수정'
 - assertVisible: '테스터 기록'
 
+# 상세는 탭바 위에 쌓이므로 먼저 빠져나온다.
+- tapOn: '뒤로'
 - tapOn: '설정'
 - assertVisible: '초대 코드'
+- assertVisible: '멤버'
+- assertVisible: '테스터 (개설자)'

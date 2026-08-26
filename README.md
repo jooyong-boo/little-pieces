@@ -78,7 +78,13 @@ pnpm --filter mobile typecheck
 pnpm --filter mobile lint
 pnpm --filter mobile test
 pnpm --filter mobile format:check
+
+# 앱 실제 구동 (시뮬레이터에 앱이 설치되어 있고 백엔드가 떠 있어야 함)
+# 회원가입 → 커플 생성 → 추억 등록 → 상세 → 설정까지 전부 훑는다
+maestro test -e EMAIL="me-$(date +%s)@test.com" apps/mobile/.maestro/signup-to-memory.yaml
 ```
+
+> **iOS 네이티브 빌드는 경로에 한글이 있으면 실패합니다.** `pod install`이 `hermes-engine.podspec`에서 `incompatible character encodings: BINARY (ASCII-8BIT) and UTF-8`로 죽습니다. 레포를 ASCII 경로에 두세요.
 
 ## 앞으로
 
