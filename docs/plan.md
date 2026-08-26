@@ -234,7 +234,7 @@ MVP 구현 중 결정한 것과, 아직 열려 있는 것.
 
 ### 남은 것
 
-- [ ] **워크스페이스 경로에 한글이 있으면 iOS 네이티브 빌드가 안 된다.** 현재 경로가 `~/orca/workspaces/개인플젝/little-pieces`인데 `pod install`이 `hermes-engine.podspec`에서 `incompatible character encodings: BINARY (ASCII-8BIT) and UTF-8`로 죽는다. CocoaPods가 `Pod::Executable.execute_command` 출력(ASCII-8BIT)을 UTF-8 경로와 이어붙이다 터지는 것이고, `LANG`/`RUBYOPT`로는 해결되지 않았다. ASCII 경로에 복사하면 즉시 통과한다 — 워크스페이스를 ASCII 경로로 옮기는 게 유일한 실질 해법
+- [ ] **워크스페이스 경로에 한글이 있으면 `pod install`이 실패해 iOS 빌드만 막힌다** (`cargo`/jest/typecheck/lint/`expo export`/E2E는 한글 경로에서도 정상). 현재 경로가 `~/orca/workspaces/개인플젝/little-pieces`이고, `hermes-engine.podspec`에서 `incompatible character encodings: BINARY (ASCII-8BIT) and UTF-8`로 죽는다. CocoaPods가 `Pod::Executable.execute_command` 출력(ASCII-8BIT)을 UTF-8 경로와 이어붙이다 터지는 것이고, `LANG`/`RUBYOPT`로는 해결되지 않았다. ASCII 경로에 복사하면 즉시 통과한다 — 워크스페이스를 ASCII 경로로 옮기는 게 유일한 실질 해법
 - [ ] **초대 코드 만료(TTL)** — 지금은 무기한이라 코드가 영구 노출된다. 커플이 채워진 뒤에는 코드를 무효화하거나 재발급 기능을 두는 편이 낫다
 - [ ] **날짜 입력이 텍스트** — `YYYY-MM-DD`를 직접 타이핑한다. `@react-native-community/datetimepicker`나 Expo의 네이티브 피커로 바꿀 것 (의존성이 늘어 MVP에서는 뺐다)
 - [ ] **Android 탭 아이콘** — `NativeTabs.Trigger.Icon`에 iOS SF Symbol만 지정했다. Android는 `drawable` 리소스가 필요해 지금은 라벨만 나온다

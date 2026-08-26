@@ -84,7 +84,7 @@ pnpm --filter mobile format:check
 maestro test -e EMAIL="me-$(date +%s)@test.com" apps/mobile/.maestro/signup-to-memory.yaml
 ```
 
-> **iOS 네이티브 빌드는 경로에 한글이 있으면 실패합니다.** `pod install`이 `hermes-engine.podspec`에서 `incompatible character encodings: BINARY (ASCII-8BIT) and UTF-8`로 죽습니다. 레포를 ASCII 경로에 두세요.
+> **경로에 한글이 있으면 `pod install`만 실패합니다.** `hermes-engine.podspec`에서 `incompatible character encodings: BINARY (ASCII-8BIT) and UTF-8`로 죽습니다. `cargo`, jest, typecheck, lint, `expo export`, E2E 스크립트는 한글 경로에서도 전부 정상입니다 — 막히는 건 CocoaPods 하나뿐이고, 그래서 **iOS 시뮬레이터/기기 빌드만 불가능**합니다. 레포를 ASCII 경로에 두면 해결됩니다.
 
 ## 앞으로
 
