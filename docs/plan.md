@@ -217,35 +217,32 @@ CREATE INDEX memories_couple_visited_idx ON memories (couple_id, visited_at DESC
 
 ---
 
-## 재검토 항목 (진행하면서 다시 볼 것)
+## 재검토 항목
 
-착수 전에 답이 필요하진 않지만, 해당 단계에 도달하면 결정해야 하는 것들. `docs/plan.md`에서 계속 업데이트한다.
+MVP 구현 중 결정한 것과, 아직 열려 있는 것.
 
-**1단계**
+### 결정됨
 
-- [ ] `legacy-nest` 백업 브랜치가 실제로 생성됐는지 확인 후에만 main 교체
-- [ ] `.gitignore`에 `apps/api/.env`가 있는지 확인 (rn-template 기본값 확인 필요)
+- [x] `legacy-nest` 백업 브랜치 생성 확인 (`6ddfa0d`, 원격 main과 동일 SHA)
+- [x] `.gitignore`에 `apps/api/.env` 포함 확인 (rn-template 기본값에 이미 있음)
+- [x] `users.nickname`은 DEFAULT 없이 `NOT NULL` — 새 DB 기준이라 기본값이 필요 없다
+- [x] **커플 나가기를 MVP에 포함** (`DELETE /couples/me`). 잘못된 코드로 연결하면 되돌릴 길이 없어 실사용 첫 단계에서 막힌다. 마지막 멤버가 나가면 커플과 추억까지 정리
+- [x] `visited_at`은 `DATE` — "이 날 여기 갔었다"의 단위가 날짜이고, TIMESTAMPTZ면 KST 밤에 올린 추억이 UTC 기준 전날로 밀린다
+- [x] 401 처리 — `api-client.ts`가 **토큰을 붙여 보낸 요청**의 401에서만 자동 로그아웃. 토큰 없이 받은 401은 자격증명 오류라 로그아웃할 게 없다
+- [x] 로컬 DB 포트 5433 — 5432는 rn-template의 db 컨테이너가 점유 중이었다
+- [x] 응답/요청 필드는 camelCase (`#[serde(rename_all)]`) — 모바일 zod 스키마가 그대로 읽힌다
 
-**2단계 (백엔드)**
+### 남은 것
 
-- [ ] `users.nickname`을 `NOT NULL DEFAULT ''`로 넣으면 기존 행(있다면)이 빈 닉네임이 됨 — 로컬 DB를 새로 만들 거면 default 없이 `NOT NULL`로 가는 게 깔끔
-- [ ] 커플 해제/탈퇴(`DELETE /couples/me`)를 MVP에 넣을지. 잘못 연동했을 때 되돌릴 방법이 없으면 실사용에서 막힌다 — MVP 후보로 재검토
-- [ ] 초대 코드 만료(TTL)를 둘지. MVP는 무기한이 단순하지만 코드가 영구 노출됨
-- [ ] `visited_at`을 `DATE`로 할지 `TIMESTAMPTZ`로 할지 — 시간까지 기록할 계획이면 지금 정해야 마이그레이션이 한 번으로 끝남
-
-**3단계 (모바일)**
-
-- [ ] 토큰 만료(401) 처리 — `api-client.ts`에서 401이면 자동 로그아웃 시킬지
-- [ ] 타임라인 페이지네이션 — 추억이 수백 개가 되기 전엔 전체 조회로 충분. 언제 `useInfiniteQuery`로 바꿀지
-- [ ] 온보딩에서 초대코드 공유 방식 (`expo-sharing` / 딥링크 `littlepieces://join?code=`)
-
-**배포 (MVP 이후)**
-
-- [ ] DB 호스팅 확정 — Supabase(Storage 묶기 쉬움) vs Neon(scale-to-zero). 둘 다 `DATABASE_URL` 교체로 끝나므로 지금 정하지 않음
-- [ ] API 배포처 (Fly.io / Railway / Render)
-- [ ] EAS 빌드 프로필 실사용 설정 (`apps/mobile/eas.json`은 지금 골격만 있음)
-
----
+- [ ] **초대 코드 만료(TTL)** — 지금은 무기한이라 코드가 영구 노출된다. 커플이 채워진 뒤에는 코드를 무효화하거나 재발급 기능을 두는 편이 낫다
+- [ ] **날짜 입력이 텍스트** — `YYYY-MM-DD`를 직접 타이핑한다. `@react-native-community/datetimepicker`나 Expo의 네이티브 피커로 바꿀 것 (의존성이 늘어 MVP에서는 뺐다)
+- [ ] **Android 탭 아이콘** — `NativeTabs.Trigger.Icon`에 iOS SF Symbol만 지정했다. Android는 `drawable` 리소스가 필요해 지금은 라벨만 나온다
+- [ ] **스플래시/아이콘 에셋이 Expo 기본값** — `assets/images/expo-logo.png` 등이 그대로다. 브랜딩 작업 필요
+- [ ] **다크 모드** — 화면들이 `bg-white` 기준 라이트 전용이다. 템플릿 데모를 지우면서 `ThemedText`/`ThemedView`도 함께 정리했으므로, 도입한다면 NativeWind `dark:` 변형으로 일관되게
+- [ ] **타임라인 페이지네이션** — 지금은 전체 조회. 추억이 수백 개가 되면 `useInfiniteQuery` + `LIMIT/OFFSET`
+- [ ] **초대 코드 딥링크** — `littlepieces://join?code=` 로 상대가 바로 열 수 있게. 지금은 RN `Share`로 텍스트만 보낸다
+- [ ] **DB/API 배포처** — Supabase(Storage 묶기 쉬움) vs Neon(scale-to-zero). `DATABASE_URL` 교체로 끝나므로 급하지 않다
+- [ ] **EAS 빌드 프로필** — `apps/mobile/eas.json`은 아직 골격만 있다
 
 ## 검증
 
