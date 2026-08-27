@@ -6,6 +6,11 @@ use uuid::Uuid;
 use crate::{error::AppError, storage::Storage};
 
 /// DB 행 그대로. `query_as!`의 대상이라 컬럼과 필드가 1:1로 맞아야 한다.
+///
+/// 아래 쿼리들이 `AS "컬럼!"`으로 NOT NULL을 명시하는 이유: sqlx의 NULL 추론은
+/// 쿼리 플랜을 보고 판단하는데, LEFT JOIN이 있으면 테이블에 데이터가 쌓여 플랜이
+/// 바뀌는 것만으로 왼쪽 테이블 컬럼까지 nullable로 보기 시작한다. 스키마가 이미
+/// 보장하는 사실이므로 추론에 맡기지 않고 못 박는다.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MemoryRow {
@@ -97,9 +102,10 @@ pub async fn list(
 ) -> Result<Vec<MemoryView>, AppError> {
     let memories = sqlx::query_as!(
         MemoryRow,
-        r#"SELECT m.id, m.author_user_id, u.nickname AS "author_nickname?",
-                  m.title, m.description, m.place_name,
-                  m.latitude, m.longitude, m.image_keys, m.visited_at, m.created_at
+        r#"SELECT m.id AS "id!", m.author_user_id, u.nickname AS "author_nickname?",
+                  m.title AS "title!", m.description, m.place_name,
+                  m.latitude, m.longitude, m.image_keys AS "image_keys!",
+                  m.visited_at AS "visited_at!", m.created_at AS "created_at!"
            FROM memories m
            LEFT JOIN users u ON u.id = m.author_user_id
            WHERE m.couple_id = $1
@@ -125,9 +131,10 @@ pub async fn find(
 ) -> Result<MemoryView, AppError> {
     let memory = sqlx::query_as!(
         MemoryRow,
-        r#"SELECT m.id, m.author_user_id, u.nickname AS "author_nickname?",
-                  m.title, m.description, m.place_name,
-                  m.latitude, m.longitude, m.image_keys, m.visited_at, m.created_at
+        r#"SELECT m.id AS "id!", m.author_user_id, u.nickname AS "author_nickname?",
+                  m.title AS "title!", m.description, m.place_name,
+                  m.latitude, m.longitude, m.image_keys AS "image_keys!",
+                  m.visited_at AS "visited_at!", m.created_at AS "created_at!"
            FROM memories m
            LEFT JOIN users u ON u.id = m.author_user_id
            WHERE m.id = $1 AND m.couple_id = $2"#,

@@ -4,6 +4,7 @@ mod couples;
 mod db;
 mod error;
 mod memories;
+mod push;
 mod response;
 mod routes;
 mod state;

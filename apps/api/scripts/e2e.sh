@@ -95,6 +95,32 @@ check 404 "C: 남의 커플 추억 삭제 불가" -X DELETE "$API/memories/$MEMO
 
 check 401 "토큰 없이 접근 거부" "$API/memories"
 
+# ---- 푸시 토큰 --------------------------------------------------------------
+# 실제 발송은 여기서 하지 않는다 — 외부 서비스(exp.host)에 의존하면 테스트가 흔들린다.
+# 발송 경로는 실기기에서 확인한다.
+PUSH_TOKEN="ExponentPushToken[e2e-$STAMP]"
+
+check 400 "잘못된 형식의 푸시 토큰 거부" -X POST "$API/push-tokens" -H "Authorization: Bearer $A_TOKEN" \
+  -H 'Content-Type: application/json' -d '{"token":"not-an-expo-token"}'
+
+check 200 "A: 푸시 토큰 등록" -X POST "$API/push-tokens" -H "Authorization: Bearer $A_TOKEN" \
+  -H 'Content-Type: application/json' -d "{\"token\":\"$PUSH_TOKEN\"}"
+
+# 같은 기기를 B가 로그인하면 토큰 주인이 B로 넘어가야 한다.
+check 200 "B: 같은 토큰 재등록 (기기 주인 이전)" -X POST "$API/push-tokens" -H "Authorization: Bearer $B_TOKEN" \
+  -H 'Content-Type: application/json' -d "{\"token\":\"$PUSH_TOKEN\"}"
+
+# 남의 토큰은 못 지운다.
+check 200 "A: 남의 토큰 삭제는 무해하게 무시" -X DELETE "$API/push-tokens" -H "Authorization: Bearer $A_TOKEN" \
+  -H 'Content-Type: application/json' -d "{\"token\":\"$PUSH_TOKEN\"}"
+
+check 200 "B: 자기 토큰 삭제" -X DELETE "$API/push-tokens" -H "Authorization: Bearer $B_TOKEN" \
+  -H 'Content-Type: application/json' -d "{\"token\":\"$PUSH_TOKEN\"}"
+
+check 401 "토큰 없이 푸시 등록 거부" -X POST "$API/push-tokens" \
+  -H 'Content-Type: application/json' -d "{\"token\":\"$PUSH_TOKEN\"}"
+# ---------------------------------------------------------------------------
+
 # ---- 이미지 ----------------------------------------------------------------
 # 1x1 PNG. 업로드한 바이트와 내려받은 바이트를 비교하려면 실제 파일이 필요하다.
 IMAGE=$(mktemp -t lp-e2e-XXXXXX).png

@@ -6,7 +6,7 @@ use tower_http::cors::CorsLayer;
 
 use crate::{
     auth::handlers as auth, couples::handlers as couples, memories::handlers as memories,
-    response::ApiResponse, state::AppState,
+    push::handlers as push, response::ApiResponse, state::AppState,
 };
 
 async fn health() -> Json<ApiResponse<&'static str>> {
@@ -25,6 +25,10 @@ pub fn build(state: AppState) -> Router {
             get(couples::me).put(couples::update).delete(couples::leave),
         )
         .route("/couples/join", post(couples::join))
+        .route(
+            "/push-tokens",
+            post(push::register).delete(push::unregister),
+        )
         .route("/memories", get(memories::list).post(memories::create))
         // 정적 세그먼트가 `/memories/{id}`보다 우선이라 UUID 파싱으로 새지 않는다.
         .route("/memories/upload-url", post(memories::upload_url))

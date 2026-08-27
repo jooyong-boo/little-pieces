@@ -10,6 +10,7 @@ use crate::{
     auth::extractor::CoupleMember,
     error::AppError,
     memories::repo::{self, MemoryInput, MemoryView},
+    push,
     response::ApiResponse,
     state::AppState,
     storage::{self, Storage},
@@ -143,6 +144,23 @@ pub async fn create(
         &input,
     )
     .await?;
+
+    // 알림은 곁가지다. 전송이 늦거나 실패해도 추억 저장 응답을 붙잡으면 안 된다.
+    let pool = state.pool.clone();
+    let title = memory.memory.title.clone();
+    let memory_id = memory.memory.id;
+    tokio::spawn(async move {
+        push::send::notify_partner(
+            &pool,
+            couple_id,
+            user_id,
+            "새 추억이 등록됐어요".to_string(),
+            title,
+            serde_json::json!({ "memoryId": memory_id }),
+        )
+        .await;
+    });
+
     Ok(Json(ApiResponse::ok(memory)))
 }
 
