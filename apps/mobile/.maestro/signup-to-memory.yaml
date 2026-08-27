@@ -7,6 +7,14 @@ appId: com.littlepieces.app
 - launchApp:
     clearState: true
 
+# 커플이 연결되면 (app)이 마운트되며 알림 권한을 묻는다 — 의도한 시점이다.
+# 시스템 팝업이라 다음 단계를 가리므로 먼저 치운다.
+- runFlow:
+    when:
+      visible: '^허용$'
+    commands:
+      - tapOn: '^허용$'
+
 # clearState는 iOS Keychain을 지우지 않아 이전 실행의 토큰이 남는다
 # (재설치해도 로그인이 유지되는 실제 동작). 남아 있으면 먼저 로그아웃한다.
 # 조건을 탭바로 잡는다. 타임라인 화면만 보면, 앱이 지도/설정 탭에 남아 있을 때
@@ -48,6 +56,14 @@ appId: com.littlepieces.app
 # 키보드를 닫아야 버튼이 드러난다. 제목은 터치 핸들러가 없어 탭이 키보드 닫기로 간다.
 - tapOn: '공간 만들기'
 - tapOn: '만들기'
+
+# 커플이 연결되면 (app)이 마운트되며 알림 권한을 묻는다 — 의도한 시점이다.
+# 시스템 팝업이라 다음 단계를 가리므로 먼저 치운다.
+- runFlow:
+    when:
+      visible: '^허용$'
+    commands:
+      - tapOn: '^허용$'
 
 # 커플이 생기면 가드가 타임라인으로 옮겨준다.
 - assertVisible: '우리의 조각들'

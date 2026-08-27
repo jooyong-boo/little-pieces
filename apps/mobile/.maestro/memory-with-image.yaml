@@ -6,6 +6,9 @@
 #   xcrun simctl addmedia booted <이미지.jpg>
 #
 #   maestro test -e EMAIL="me-$(date +%s)@test.com" apps/mobile/.maestro/memory-with-image.yaml
+# **iOS 전용.** 시스템 사진 피커의 UI가 플랫폼마다 완전히 달라(iOS는 PHPicker,
+# Android는 Photo Picker) 하나의 플로우로 양쪽을 몰기 어렵다. Android의 사진 경로는
+# 손으로 확인한다. 플랫폼 공통 회귀는 signup-to-memory가 담당한다.
 appId: com.littlepieces.app
 ---
 # 가입 → 커플 생성 → 추억 등록은 그대로 재사용한다. 복붙하지 않는다.

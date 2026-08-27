@@ -38,47 +38,48 @@
 
 ## 진행 상황 (2026-08-27)
 
-- [x] 0단계 경로 정리, 1·2차(사진 업로드), 3차 지도(iOS)
-- [x] **3차 Android 지도** — 갤럭시 A15(Android 16)에서 Google Maps 정상 렌더. 키 동작 확인
-- [x] **4차 푸시 백엔드** — `push_tokens`, 등록/삭제, Expo Push 발송 경로. Rust 32 / E2E 42 통과
-- [ ] **Google Maps 키 애플리케이션 제한** — 아래 SHA-1로 콘솔에서 설정
-- [ ] **4차 푸시 모바일** — `expo-notifications` + `eas init`. 그다음 실기기 수신 확인
-- [ ] iOS 푸시 — 유료 Apple Developer Program 필요. 결제 전까지 미검증으로 둔다
+- [x] 경로 정리, 1차(기본), 2차(사진), **3차(지도) iOS + Android 완료**
+- [x] Google Maps 키 애플리케이션 제한 적용 후에도 지도 정상 — 제한이 맞게 걸렸다는 증거
+- [x] **4차 푸시 — 백엔드 + 모바일 코드 완료.** Rust 32 / jest 41 / E2E 42 통과
+- [ ] **Android 푸시 실수신** — Firebase(FCM) 설정 필요. 아래 참조
+- [ ] iOS 푸시 실수신 — 유료 Apple Developer Program 필요. 미검증으로 둔다
 
-### Google Maps 키 제한에 쓸 SHA-1
+### Android 푸시에 남은 설정 (무료, 사용자 작업)
+
+실기기 로그에서 확인한 사실:
 
 ```
-5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25
+FirebaseApp failed to initialize because no default options were found.
 ```
 
-패키지명 `com.littlepieces.app`과 함께 등록한다.
+알림 권한은 이미 허용(`POST_NOTIFICATIONS: granted=true`)이고 코드 경로도 정상인데,
+`google-services.json`이 없어 토큰 발급 자체가 안 된다. **Android 푸시는 FCM 설정이 필요하다**
+— 무료지만 Firebase 프로젝트를 붙여야 한다.
 
-**이 SHA-1은 이 프로젝트 전용이 아니다.** 키스토어는 `apps/mobile/android/app/debug.keystore`에
-있고(`~/.android/`가 아니다 — Expo prebuild가 프로젝트 안에 둔다), 생성일이 2014-01-01인 데서
-보이듯 RN/Expo 템플릿이 배포하는 공용 debug 키스토어다. 이 제한이 실질적으로 막는 것은
-패키지명 하나뿐이다. **실제 보호는 배포용 릴리스 키스토어의 SHA-1을 등록할 때 생긴다.**
+1. Firebase 콘솔에서 프로젝트 추가 (Maps 키를 만든 Google Cloud 프로젝트를 그대로 고르면 된다)
+2. Android 앱 추가 → 패키지 이름 `com.littlepieces.app`
+3. `google-services.json` 다운로드 → `apps/mobile/`에 두고 `app.json`의
+   `android.googleServicesFile`로 참조. 이 파일은 APK에 그대로 들어가므로 비밀이 아니다
+4. Firebase 콘솔 → 프로젝트 설정 → 서비스 계정 → 비공개 키(JSON) 생성 →
+   `eas credentials`로 Expo에 업로드. **이 JSON은 진짜 비밀이므로 커밋하지 않는다**
 
-### 실기기에서 잡은 것 (시뮬레이터에선 안 드러남)
+### Maestro 플로우의 플랫폼 경계 (실기기에서 드러난 것)
 
-1. **키보드가 제출 버튼을 덮었다** — 네 화면이 스크롤 없는 가운데 정렬. iOS 시뮬레이터는
-   하드웨어 키보드를 써서 보이지 않았다. `keyboardShouldPersistTaps`가 어디에도 없어
-   **모든 폼에서 첫 탭이 버려지던 것**도 함께 고쳤다.
-2. **Android 릴리스가 평문 HTTP를 차단한다** — 개발 API가 HTTP라 로그인조차 안 됐다.
-   프로덕션은 HTTPS이므로 `ALLOW_CLEARTEXT=1`일 때만 켜지는 opt-in으로 뒀다.
-3. **`sqlx`의 NULL 추론은 쿼리 플랜에 의존한다** — 테이블에 데이터가 쌓이자 LEFT JOIN
-   왼쪽 컬럼까지 nullable로 보기 시작해 빌드가 깨졌다. 빈 DB에서만 컴파일되던 코드였다.
-   `AS "컬럼!"`으로 못 박았다.
+| 플로우                 | iOS | Android      |
+| ---------------------- | --- | ------------ |
+| `signup-to-memory`     | ✅  | ✅           |
+| `memory-with-location` | ✅  | ✅           |
+| `memory-with-image`    | ✅  | **iOS 전용** |
 
-### 개발 편의상 알아둘 것
-
-- **Android 개발 빌드는 이 기기에서 시작에 14초** 걸린다(번들 전송 4.3초 + 렌더 8.4초).
-  릴리스 빌드는 **0.9초**다. 실기기 확인은 릴리스로 하는 편이 빠르고 안정적이다.
-- **Maestro는 `--device`로 기기를 명시해야 한다.** iOS 시뮬레이터와 Android가 함께 붙어
-  있으면 엉뚱한 쪽으로 간다.
-- **키보드가 떠 있을 때 `scrollUntilVisible`을 쓰지 않는다.** 스와이프가 키보드 위를
-  지나가며 입력칸에 오타를 남긴다.
-- **`app.config.js`를 바꾸면 `expo prebuild`를 따로 돌려야 한다.** `android/`가 이미 있으면
-  `expo run:android`가 config를 다시 반영하지 않는다.
+- **사진 피커는 플랫폼마다 완전히 다르다**(iOS PHPicker / Android Photo Picker).
+  하나의 플로우로 양쪽을 몰지 않는다. Android 사진 경로는 손으로 확인한다.
+- **지도 마커의 접근성 표현도 다르다**(MapKit vs Google Maps). 마커 라벨로 단정하지 않고
+  "빈 상태 안내가 사라졌다"를 플랫폼 중립적 증거로 쓴다.
+- **로그아웃 조건은 탭바로 잡는다.** 타임라인 화면만 보면 앱이 지도/설정 탭에 남아 있을 때
+  로그인 상태인데도 조건이 안 걸린다.
+- **알림 권한 팝업이 플로우를 가린다.** 커플 연결 직후(의도한 시점)에 뜨므로 그 자리에서 치운다.
+- **작은 화면에서는 버튼이 접힌다.** 갤럭시 A15에서 상세의 '뒤로'가 화면 밖이었다.
+  단, **키보드가 떠 있을 때 스크롤하면 안 된다** — 스와이프가 키보드 위를 지나며 오타를 남긴다.
 
 ---
 

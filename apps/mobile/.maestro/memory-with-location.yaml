@@ -34,10 +34,12 @@ appId: com.littlepieces.app
 - tapOn: '추억 남기기'
 - tapOn: '저장'
 
-# 지도 탭에 마커로 뜬다. 마커 라벨은 "제목, 날짜"다.
+# 지도 탭에 핀이 생긴다.
+# 마커의 접근성 표현은 iOS(MapKit)와 Android(Google Maps)가 달라서 라벨로 단정하지 않는다.
+# 빈 상태 안내가 사라지는 것이 "좌표 있는 추억이 생겼다"의 플랫폼 중립적 증거다.
 - tapOn: '지도'
 - extendedWaitUntil:
-    visible: '지도에 찍은 추억, .*'
+    notVisible: '아직 지도에 찍힌 추억이 없어요.'
     timeout: 15000
 
 # 위치를 지우면 지도에서도 사라져야 한다. 좌표가 하나도 없으면 빈 상태 안내가 뜬다.
