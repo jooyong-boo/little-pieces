@@ -24,11 +24,12 @@ export default function MapScreen() {
     .map(({ latitude, longitude }) => `${latitude},${longitude}`)
     .join('|');
 
-  // 첫 화면과 이후 갱신을 다른 수단으로 맞춘다. 실기기에서 확인한 사실:
-  //   - 마운트 직후의 fitToCoordinates는 지도가 아직 네이티브 레이아웃 전이라 무시된다
-  //     → 그래서 첫 화면은 initialRegion으로 계산해 넣는다(타이밍에 의존하지 않는다).
-  //   - 이미 떠 있는 지도에 대해서는 fitToCoordinates가 정상 동작한다
-  //     → 탭은 한 번 마운트되면 계속 살아 있으므로, 추억이 늘면 이걸로 다시 맞춘다.
+  // 첫 화면과 이후 갱신을 다른 수단으로 맞춘다. 시뮬레이터에서 관찰한 것:
+  //   - 마운트 직후에 부른 fitToCoordinates는 효과가 없었다.
+  //   - 같은 API를 나중에(버튼으로) 부르면 정상 동작한다 — API가 깨진 게 아니라 시점 문제다.
+  //     정확한 이유는 확인하지 않았다.
+  // 그래서 첫 화면은 initialRegion으로 계산해 넣어 시점에 아예 의존하지 않고,
+  // 탭이 계속 살아 있는 동안의 재조정만 fitToCoordinates에 맡긴다.
   useEffect(() => {
     if (coordinates.length === 0) return;
     mapRef.current?.fitToCoordinates(coordinates, { edgePadding: EDGE_PADDING, animated: true });
