@@ -8,3 +8,7 @@ expo-env.d.ts
 # Firebase(FCM) 설정. APK에 그대로 들어가므로 비밀은 아니지만, 공개 레포에서
 # 긁히기 쉬운 값이라 커밋하지 않는다. Firebase 콘솔에서 각자 받는다.
 google-services.json
+
+# 앱 서명 keystore와 비밀번호. 절대 커밋하지 않는다.
+# 잃어버리면 스토어 업데이트를 올릴 수 없으므로 별도로 백업해야 한다.
+credentials/
