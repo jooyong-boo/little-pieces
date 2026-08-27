@@ -1,3 +1,4 @@
+mod anniversary;
 mod auth;
 mod config;
 mod couples;
@@ -50,6 +51,8 @@ async fn main() {
         jwt_secret: config.jwt_secret,
         storage,
     };
+    anniversary::spawn(state.pool.clone());
+
     let app = routes::build(state);
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", config.port))

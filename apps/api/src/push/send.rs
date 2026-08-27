@@ -23,6 +23,20 @@ struct ExpoMessage<'a> {
 /// **실패해도 호출부의 작업을 실패시키지 않는다.** 추억은 저장됐는데 알림 전송이
 /// 안 됐다고 500을 돌려주면, 사용자는 저장이 안 된 줄 알고 다시 쓴다.
 /// 그래서 결과는 로그로만 남긴다.
+/// 커플 전원에게. 대상 선정만 다르고 전송 경로는 파트너 알림과 같다.
+pub async fn notify_couple(
+    pool: &PgPool,
+    couple_id: Uuid,
+    title: String,
+    body: String,
+    data: serde_json::Value,
+) {
+    match repo::couple_tokens(pool, couple_id).await {
+        Ok(tokens) => deliver(tokens, &title, &body, &data).await,
+        Err(error) => tracing::error!(%error, "커플 푸시 토큰 조회 실패"),
+    }
+}
+
 pub async fn notify_partner(
     pool: &PgPool,
     couple_id: Uuid,
@@ -31,16 +45,16 @@ pub async fn notify_partner(
     body: String,
     data: serde_json::Value,
 ) {
-    let tokens = match repo::partner_tokens(pool, couple_id, actor_user_id).await {
-        Ok(tokens) => tokens,
-        Err(error) => {
-            tracing::error!(%error, "푸시 토큰 조회 실패");
-            return;
-        }
-    };
+    match repo::partner_tokens(pool, couple_id, actor_user_id).await {
+        Ok(tokens) => deliver(tokens, &title, &body, &data).await,
+        Err(error) => tracing::error!(%error, "푸시 토큰 조회 실패"),
+    }
+}
 
+/// 실제 전송. 대상 목록만 다르고 나머지는 같아서 한 곳에 둔다.
+async fn deliver(tokens: Vec<String>, title: &str, body: &str, data: &serde_json::Value) {
     if tokens.is_empty() {
-        // 파트너가 아직 알림을 허용하지 않았거나 혼자인 커플이다. 정상이다.
+        // 아직 알림을 허용하지 않았거나 혼자인 커플이다. 정상이다.
         return;
     }
 
@@ -50,8 +64,8 @@ pub async fn notify_partner(
             .iter()
             .map(|token| ExpoMessage {
                 to: token,
-                title: &title,
-                body: &body,
+                title,
+                body,
                 data: data.clone(),
                 sound: "default",
             })

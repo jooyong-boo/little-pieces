@@ -59,6 +59,20 @@ pub async fn partner_tokens(
     Ok(tokens)
 }
 
+/// 커플 전원. 기념일 알림은 함께 만든 추억이라 작성자도 대상이다.
+pub async fn couple_tokens(pool: &PgPool, couple_id: Uuid) -> Result<Vec<String>, AppError> {
+    let tokens = sqlx::query_scalar!(
+        "SELECT p.token FROM push_tokens p \
+         JOIN couple_members m ON m.user_id = p.user_id \
+         WHERE m.couple_id = $1",
+        couple_id
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(tokens)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
