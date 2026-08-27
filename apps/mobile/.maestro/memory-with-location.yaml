@@ -1,0 +1,52 @@
+# 추억에 위치 찍기. iOS는 Apple Maps라 API 키 없이 돈다.
+#
+#   maestro test -e EMAIL="me-$(date +%s)@test.com" apps/mobile/.maestro/memory-with-location.yaml
+appId: com.littlepieces.app
+---
+# 가입 → 커플 생성 → 추억 등록은 그대로 재사용한다.
+- runFlow: signup-to-memory.yaml
+
+- tapOn: '추억'
+- tapOn: '+ 추가'
+- assertVisible: '추억 남기기'
+
+# 위치가 없을 때는 추가 버튼만 보인다.
+- assertVisible: '위치 추가'
+- tapOn: '위치 추가'
+
+# 라우트가 아니라 Modal이다. 지도가 뜨는 것 자체가 Apple Maps 경로의 증거다.
+- assertVisible: '이 위치로'
+- swipe:
+    start: '50%,45%'
+    end: '35%,30%'
+    duration: 600
+- tapOn: '이 위치로'
+
+# 폼으로 돌아오면 좌표가 "텍스트로" 남아야 한다 —
+# 지도는 스크린리더에 아무 의미도 주지 않으므로 이 라벨이 유일한 접근 경로다.
+- assertVisible: '위치 -?\d+\.\d+, -?\d+\.\d+'
+- assertVisible: '위치 변경'
+- assertVisible: '위치 제거'
+
+- tapOn: '예: 첫 데이트'
+- inputText: '지도에 찍은 추억'
+- tapOn: '추억 남기기'
+- tapOn: '저장'
+
+# 지도 탭에 마커로 뜬다. 마커 라벨은 "제목, 날짜"다.
+- tapOn: '지도'
+- extendedWaitUntil:
+    visible: '지도에 찍은 추억, .*'
+    timeout: 15000
+
+# 위치를 지우면 지도에서도 사라져야 한다. 좌표가 하나도 없으면 빈 상태 안내가 뜬다.
+- tapOn: '추억'
+- tapOn: '지도에 찍은 추억.*'
+- assertVisible: '추억 수정'
+- tapOn: '위치 제거'
+- assertVisible: '위치 추가'
+- tapOn: '저장'
+- tapOn: '지도'
+- extendedWaitUntil:
+    visible: '아직 지도에 찍힌 추억이 없어요.'
+    timeout: 15000

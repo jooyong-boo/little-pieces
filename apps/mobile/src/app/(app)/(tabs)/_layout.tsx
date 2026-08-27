@@ -10,6 +10,11 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Icon sf="heart.text.square.fill" />
       </NativeTabs.Trigger>
 
+      <NativeTabs.Trigger name="map">
+        <NativeTabs.Trigger.Label>지도</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="map.fill" />
+      </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="settings">
         <NativeTabs.Trigger.Label>설정</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="gearshape.fill" />

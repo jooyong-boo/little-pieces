@@ -8,6 +8,8 @@ import { Button } from '@/components/button';
 import { ErrorText } from '@/components/error-text';
 import { FormField } from '@/components/form-field';
 import { ImageStrip } from '@/components/image-strip';
+import { LocationField } from '@/components/location-field';
+import type { Coordinate } from '@/lib/map';
 import type { MemoryInput } from '@/lib/memory-api';
 import { toKeys, type MemoryImage } from '@/lib/memory-images';
 import { todayIso } from '@/lib/timeline';
@@ -29,6 +31,8 @@ type MemoryFormProps = {
   defaults?: MemoryFormDefaults;
   /** 수정 화면에서 이미 올려둔 사진. */
   initialImages?: MemoryImage[];
+  /** 수정 화면에서 이미 찍어둔 위치. */
+  initialCoordinate?: Coordinate | null;
   submitLabel: string;
   isPending: boolean;
   error: Error | null;
@@ -41,12 +45,14 @@ const nullIfBlank = (value: string) => (value.trim() === '' ? null : value.trim(
 export function MemoryForm({
   defaults,
   initialImages,
+  initialCoordinate,
   submitLabel,
   isPending,
   error,
   onSubmit,
 }: MemoryFormProps) {
   const [images, setImages] = useState<MemoryImage[]>(initialImages ?? []);
+  const [coordinate, setCoordinate] = useState<Coordinate | null>(initialCoordinate ?? null);
   const { control, handleSubmit } = useForm<MemoryFormValues>({
     resolver: zodResolver(memoryFormSchema),
     defaultValues: {
@@ -62,9 +68,8 @@ export function MemoryForm({
       title: values.title.trim(),
       description: nullIfBlank(values.description),
       placeName: nullIfBlank(values.placeName),
-      // 위치는 지도 단계에서 채운다. 지금은 항상 비운다.
-      latitude: null,
-      longitude: null,
+      latitude: coordinate?.latitude ?? null,
+      longitude: coordinate?.longitude ?? null,
       imageKeys: toKeys(images),
       visitedAt: values.visitedAt,
     });
@@ -80,6 +85,7 @@ export function MemoryForm({
         keyboardType="numbers-and-punctuation"
       />
       <FormField control={control} name="placeName" label="장소 (선택)" placeholder="예: 성수동" />
+      <LocationField coordinate={coordinate} onChange={setCoordinate} />
       <ImageStrip images={images} onChange={setImages} />
       <FormField
         control={control}

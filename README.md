@@ -41,7 +41,7 @@ pnpm --filter mobile ios                 # 또는 android
 - **User** — 이메일/비밀번호(argon2) + 닉네임. 닉네임은 파트너 화면에 그대로 보입니다.
 - **Couple** — 이름, 처음 만난 날, 6자리 초대 코드. 최대 2명.
 - **CoupleMember** — `user_id`에 UNIQUE가 걸려 있어 **한 유저는 한 커플에만** 속합니다. 애플리케이션 검사가 아니라 DB 제약이라 동시 요청에도 뚫리지 않습니다.
-- **Memory** — 제목, 메모, 장소명, 방문일(`DATE`), 위경도(선택), 사진(최대 10장). 커플 단위로 공유됩니다.
+- **Memory** — 제목, 메모, 장소명, 방문일(`DATE`), 위치(선택), 사진(최대 10장). 커플 단위로 공유됩니다.
 
 ## API
 
@@ -73,6 +73,13 @@ S3 호환이면 무엇이든 됩니다. 로컬은 `docker compose`의 MinIO, 배
 - 추억을 저장할 때 클라이언트가 보낸 키가 **전부 그 커플 것인지** 형식 파싱으로 검사합니다. 이 검사가 없으면 남의 커플 키를 적어 넣고 서명된 GET으로 사진을 읽을 수 있습니다.
 - S3 환경변수 다섯 개 중 하나라도 비면 사진 업로드만 503으로 비활성화되고 나머지 기능은 그대로 돕니다.
 
+## 지도
+
+- **iOS는 API 키가 필요 없습니다.** `react-native-maps` 플러그인은 `iosGoogleMapsApiKey`를 줄 때만 Google Maps Pod을 붙입니다. 키를 주지 않으므로 Apple Maps로 동작합니다(`Podfile.lock`에 GoogleMaps가 없는 것으로 확인 가능).
+- **Android는 키가 필요합니다.** `apps/mobile/.env`의 `GOOGLE_MAPS_ANDROID_KEY`를 `app.config.js`가 읽어 매니페스트에 넣습니다. 비어 있으면 Android 지도만 회색으로 뜨고 나머지는 그대로 돕니다.
+- 위치는 전체화면 Modal에서 고릅니다. 지도를 폼 안에 인라인으로 두면 ScrollView와 제스처가 싸우기 때문입니다.
+- 지도 탭은 좌표가 있는 추억을 마커로, 방문일 오름차순 경로선으로 잇습니다.
+
 ## 검증
 
 ```bash
@@ -92,6 +99,7 @@ pnpm --filter mobile format:check
 # 앱 실제 구동 (시뮬레이터에 앱이 설치되어 있고 백엔드가 떠 있어야 함)
 maestro test -e EMAIL="me-$(date +%s)@test.com" apps/mobile/.maestro/signup-to-memory.yaml
 maestro test -e EMAIL="me-$(date +%s)@test.com" apps/mobile/.maestro/memory-with-image.yaml
+maestro test -e EMAIL="me-$(date +%s)@test.com" apps/mobile/.maestro/memory-with-location.yaml
 ```
 
 > **레포 경로에 한글이 있으면 `pod install`이 실패합니다.** `hermes-engine.podspec`에서 `incompatible character encodings: BINARY (ASCII-8BIT) and UTF-8`로 죽습니다. `cargo`, jest, typecheck, lint, `expo export`, E2E 스크립트는 한글 경로에서도 전부 정상입니다 — 막히는 건 CocoaPods 하나뿐이고, 그래서 **iOS 시뮬레이터/기기 빌드만 불가능**합니다. 레포를 ASCII 경로에 두면 해결됩니다.
@@ -100,10 +108,8 @@ maestro test -e EMAIL="me-$(date +%s)@test.com" apps/mobile/.maestro/memory-with
 
 `docs/plan.md`의 "2차 이후 로드맵"과 "재검토 항목"을 참고하세요. 요약하면:
 
-1. **지도** — `react-native-maps`. 좌표 컬럼은 이미 있습니다.
-2. **이미지** — Cloudflare R2 presigned PUT. 서버는 바이트를 거치지 않습니다.
-3. **푸시** — 파트너가 추억을 올릴 때 Expo Push API로 알림.
-4. **"n년 전 오늘"** — 3번의 푸시 경로 재사용.
+1. **푸시** — 파트너가 추억을 올릴 때 Expo Push API로 알림. EAS `projectId`가 먼저 필요하고, 시뮬레이터는 APNs 등록이 안 되므로 실기기가 필요합니다.
+2. **"n년 전 오늘"** — 1번의 푸시 경로 재사용.
 
 ## 스크립트
 

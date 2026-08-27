@@ -46,6 +46,11 @@ export default function MemoryDetailScreen() {
                 visitedAt: query.data.visitedAt,
               }}
               initialImages={fromMemory(query.data)}
+              initialCoordinate={
+                query.data.latitude !== null && query.data.longitude !== null
+                  ? { latitude: query.data.latitude, longitude: query.data.longitude }
+                  : null
+              }
               submitLabel="저장"
               isPending={update.isPending}
               error={update.error}
