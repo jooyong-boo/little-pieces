@@ -1,0 +1,70 @@
+# 추억에 사진 붙이기. 네이티브 사진 피커 모달을 거치므로 signup-to-memory와
+# 실패 지점이 다르다.
+#
+# 시뮬레이터에 사진이 한 장도 없으면 피커가 비어 있다. 기본 샘플 사진이
+# 보통 들어 있지만, 없다면 먼저 씨딩한다:
+#   xcrun simctl addmedia booted <이미지.jpg>
+#
+#   maestro test -e EMAIL="me-$(date +%s)@test.com" apps/mobile/.maestro/memory-with-image.yaml
+appId: com.littlepieces.app
+---
+# 가입 → 커플 생성 → 추억 등록은 그대로 재사용한다. 복붙하지 않는다.
+- runFlow: signup-to-memory.yaml
+
+# 위 플로우는 설정 탭에서 끝난다.
+- tapOn: '추억'
+- tapOn: '+ 추가'
+- assertVisible: '추억 남기기'
+
+- tapOn: '사진 추가'
+
+# 시스템 사진 피커. selectionLimit이 실제로 걸렸는지 제목으로 확인한다.
+- assertVisible: '최대 10장의 사진을 선택합니다.'
+# 셀 레이블이 "사진, 2024년 1월 26일, 오후 9:10" 형태라 기기의 사진 내용에
+# 따라 달라진다. 그리드 첫 두 칸을 좌표로 고른다.
+# 그리드가 그려지기 전에 좌표를 누르면 아무것도 안 골라지고,
+# 그러면 완료 버튼 자체가 없어서 다음 단계가 깨진다.
+- extendedWaitUntil:
+    visible: '사진, .*'
+    timeout: 15000
+- tapOn:
+    point: '17%,28%'
+- tapOn:
+    point: '50%,28%'
+# 선택이 실제로 잡혔는지 확인하고 나서 완료를 누른다.
+- extendedWaitUntil:
+    visible: '2장의 사진'
+    timeout: 10000
+- tapOn: '완료'
+
+# 고른 즉시 업로드한다. 두 장이 모두 남아야 한다 —
+# 한 장만 남으면 ImageStrip이 prop 배열을 기준으로 더하고 있다는 뜻이고,
+# 그러면 먼저 끝난 업로드가 나중 것에 덮인다.
+- extendedWaitUntil:
+    visible: '사진 \(2/10\)'
+    timeout: 30000
+
+- tapOn: '예: 첫 데이트'
+- inputText: '사진 있는 추억'
+- tapOn: '추억 남기기'
+- tapOn: '저장'
+
+# 타임라인 썸네일은 서명된 조회 URL로 그려진다. 접근성 라벨에도 장수가 실린다.
+- extendedWaitUntil:
+    visible: '사진 있는 추억, 사진 2장, 테스터 기록'
+    timeout: 15000
+
+# 상세에서도 서명 URL로 다시 로드되는지 (fromMemory가 key↔url 짝을 맞추는지)
+- tapOn: '사진 있는 추억, 사진 2장, 테스터 기록'
+- assertVisible: '추억 수정'
+- assertVisible: '사진 \(2/10\)'
+
+# 한 장 지우고 저장하면 서버까지 반영되어야 한다
+- tapOn:
+    text: '사진 제거'
+    index: 0
+- assertVisible: '사진 \(1/10\)'
+- tapOn: '저장'
+- extendedWaitUntil:
+    visible: '사진 있는 추억, 사진 1장, 테스터 기록'
+    timeout: 15000

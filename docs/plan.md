@@ -36,16 +36,41 @@
 
 ---
 
-## 진행 상황 (2026-08-26)
+## 진행 상황 (2026-08-27) — 2차 완료
 
-- [x] **1단계 백엔드** — presigned PUT/GET, `image_keys` 마이그레이션, `POST /memories/upload-url`,
-      커플 스코프 키 검증. Rust 테스트 30개, E2E 검사 30개 + 본문 단정 6개 통과(실제 MinIO 업로드 →
-      바이트 왕복 비교 → 타 커플 키 403 포함).
-- [x] **2단계 모바일 코드** — 피커·업로드·ImageStrip·타임라인 썸네일. typecheck/lint/jest 29개 통과.
-- [ ] **0단계 경로 정리** — 아직. 백엔드와 모바일 코드는 한글 경로에서도 전부 검증됐지만
-      **네이티브 빌드(`pod install`)만 막혀 있어 실기기/시뮬레이터 구동을 못 했다.**
-- [ ] **Maestro 사진 플로우** — 앱을 빌드할 수 있게 된 뒤에 작성한다. 네이티브 사진 피커의
-      실제 레이블을 보지 않고 쓰면 추측이 된다.
+- [x] **0단계 경로 정리** — `개인플젝` → `little-pieces`. `pod install` 통과 확인
+      (`Podfile.lock` + `Pods/Manifest.lock` 생성). 이게 한글 경로 문제의 종결점이다.
+- [x] **1단계 백엔드** — presigned PUT/GET, `image_keys`, `POST /memories/upload-url`,
+      커플 스코프 키 검증. Rust 30개, E2E 검사 30개 + 본문 단정 6개 통과.
+- [x] **2단계 모바일** — 피커·업로드·ImageStrip·타임라인 썸네일. jest 29개 통과.
+- [x] **실기기(시뮬레이터) 구동 검증** — 아래 전부 눈으로 확인.
+- [x] **Maestro `memory-with-image.yaml`** — 3연속 통과.
+
+### 실구동에서 확인한 것
+
+정적 검사가 증명할 수 없던 것들:
+
+1. **여러 장 선택이 전부 남는다** (`사진 (2/10)`). `ImageStrip`의 `onChange`를
+   setState 업데이터로 바꾼 게 실제로 필요했다 — prop 배열 기준이었으면 먼저 끝난
+   업로드가 덮여 한 장만 남았을 것이다.
+2. **MinIO에 실제 객체가 두 개** 생겼다(`.heic` 2.7MiB + `.jpg` 59KiB).
+   `resolveMimeType`이 HEIC를 파일명 확장자로 제대로 잡았다.
+3. **타임라인·상세에서 서명된 GET URL로 렌더된다.** `fromMemory()`의 key↔url
+   짝 맞추기가 맞았다.
+4. **제거 후 저장이 서버까지 반영된다** (재진입해도 `사진 (1/10)`).
+5. **권한 설정이 실제로 먹었다** — `Info.plist`에 한국어
+   `NSPhotoLibraryUsageDescription`이 있고, 카메라·마이크는 **키 자체가 없다**
+   (플러그인의 `false`가 권한을 아예 막았다).
+6. **사진 없는 추억은 회귀 없음** — `signup-to-memory.yaml` 그대로 통과.
+
+메모: iOS 14+의 PHPicker는 out-of-process라 **사진 접근 권한 팝업이 뜨지 않는다.**
+`NSPhotoLibraryUsageDescription`은 값이 있어야 하지만 사용자에게는 안 보인다.
+
+### 알게 된 것 / 남는 것
+
+- `quality: 0.7`은 피커가 재인코딩할 때만 먹는다. HEIC 원본은 그대로 통과해
+  2.7MiB가 올라갔다. 서버측 리사이즈가 없는 한 큰 파일은 큰 채로 저장된다.
+- HEIC는 iOS에서만 안전하게 렌더된다. Android/웹까지 가면 변환이 필요하다.
 
 ---
 
