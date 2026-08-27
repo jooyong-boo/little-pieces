@@ -4,3 +4,7 @@
 
 expo-env.d.ts
 # @end expo-cli
+
+# Firebase(FCM) 설정. APK에 그대로 들어가므로 비밀은 아니지만, 공개 레포에서
+# 긁히기 쉬운 값이라 커밋하지 않는다. Firebase 콘솔에서 각자 받는다.
+google-services.json

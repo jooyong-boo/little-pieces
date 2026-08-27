@@ -6,8 +6,19 @@
 //   ALLOW_CLEARTEXT=1 npx expo run:android --variant release
 const allowCleartext = process.env.ALLOW_CLEARTEXT === '1';
 
+// Firebase(FCM) 설정. Android 푸시 토큰 발급에 필요하다.
+// 커밋하지 않는 파일이라, 없으면 조용히 건너뛴다 — 푸시만 안 되고 나머지는 그대로 빌드된다.
+const fs = require('node:fs');
+const path = require('node:path');
+const googleServicesFile = './google-services.json';
+const hasFirebase = fs.existsSync(path.join(__dirname, googleServicesFile));
+
 module.exports = ({ config }) => ({
   ...config,
+  android: {
+    ...config.android,
+    ...(hasFirebase ? { googleServicesFile } : {}),
+  },
   plugins: [
     ...(config.plugins ?? []),
     ...(allowCleartext
