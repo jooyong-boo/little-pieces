@@ -36,40 +36,44 @@
 
 ---
 
-## 진행 상황 (2026-08-27)
+## 진행 상황 (2026-08-27) — 4차(푸시)까지 완료
 
-- [x] 경로 정리, 1차(기본), 2차(사진), **3차(지도) iOS + Android 완료**
-- [x] Google Maps 키 애플리케이션 제한 적용 후에도 지도 정상 — 제한이 맞게 걸렸다는 증거
-- [x] **4차 푸시 — 백엔드 + 모바일 코드 완료.** Rust 32 / jest 41 / E2E 42 통과
-- [ ] **Android 푸시 실수신** — Firebase(FCM) 설정 필요. 아래 참조
-- [ ] iOS 푸시 실수신 — 유료 Apple Developer Program 필요. 미검증으로 둔다
+- [x] 1차 기본, 2차 사진, 3차 지도(iOS + Android)
+- [x] **4차 푸시 — Android 실기기 수신까지 확인**
+- [ ] iOS 푸시 실수신 — 유료 Apple Developer Program 필요. 코드는 같은 경로를 타지만 **미검증**
+- [ ] 원격 `main` 교체 — 아직 NestJS 트리(`6ddfa0d`)
 
-### Android 푸시에 남은 설정 (무료, 사용자 작업)
+### 갤럭시 A15에서 실제로 확인한 것
 
-실기기 로그에서 확인한 사실:
+1. **토큰 발급·저장** — `ExponentPushToken[...]`이 `push_tokens`에 저장됨
+2. **알림 수신** — 파트너가 추억을 올리자 폰에 도착
+   (`android.title = 새 추억이 등록됐어요`, 본문은 추억 제목, `channel=default`)
+3. **알림 탭 → 해당 추억 상세로 이동**
+4. **작성자 제외** — 자기가 올린 추억은 자기에게 오지 않음 (알림 0건)
 
-```
-FirebaseApp failed to initialize because no default options were found.
-```
+### Android 푸시 설정 (완료)
 
-알림 권한은 이미 허용(`POST_NOTIFICATIONS: granted=true`)이고 코드 경로도 정상인데,
-`google-services.json`이 없어 토큰 발급 자체가 안 된다. **Android 푸시는 FCM 설정이 필요하다**
-— 무료지만 Firebase 프로젝트를 붙여야 한다.
+- Firebase 프로젝트 `little-pieces-9b1bf`, `google-services.json`은 gitignore
+- EAS 프로젝트 `@boojooyong/little-pieces` (`fb81fb40-37be-4507-abad-8ee9a20d1560`)
+- FCM V1 서비스 계정 키를 Expo에 등록
 
-1. Firebase 콘솔에서 프로젝트 추가 (Maps 키를 만든 Google Cloud 프로젝트를 그대로 고르면 된다)
-2. Android 앱 추가 → 패키지 이름 `com.littlepieces.app`
-3. `google-services.json` 다운로드 → `apps/mobile/`에 두고 `app.json`의
-   `android.googleServicesFile`로 참조. 이 파일은 APK에 그대로 들어가므로 비밀이 아니다
-4. Firebase 콘솔 → 프로젝트 설정 → 서비스 계정 → 비공개 키(JSON) 생성 →
-   `eas credentials`로 Expo에 업로드. **이 JSON은 진짜 비밀이므로 커밋하지 않는다**
+**주의: `app.json`의 `owner`가 프로젝트 소유 계정을 결정한다.** 회사 계정으로 박혀 있어
+`eas init`이 계속 그쪽을 보고 개인 계정 토큰으로는 권한 오류가 났다.
 
-### Maestro 플로우의 플랫폼 경계 (실기기에서 드러난 것)
+**Expo 대시보드의 "Google Service Account Key" 슬롯은 두 개다.** 마법사 4단계의 것은
+**Play 스토어 업로드용**이고, FCM 푸시용은 마법사 완료 후 나타나는
+"FCM V1 service account key" 슬롯이다.
 
-| 플로우                 | iOS | Android      |
-| ---------------------- | --- | ------------ |
-| `signup-to-memory`     | ✅  | ✅           |
-| `memory-with-location` | ✅  | ✅           |
-| `memory-with-image`    | ✅  | **iOS 전용** |
+### 서명 keystore (중요)
+
+`apps/mobile/credentials/upload.jks` — EAS에 등록됨(SHA-1 `58:66...88:31`). gitignore 대상.
+**잃어버리면 스토어 업데이트를 올릴 수 없다.** 별도 백업 필요.
+아직 아무것도 서명하지 않았으므로 실제 배포 전이라면 재생성해도 비용이 없다.
+
+---------------------- | --- | ------------ |
+| `signup-to-memory` | ✅ | ✅ |
+| `memory-with-location` | ✅ | ✅ |
+| `memory-with-image` | ✅ | **iOS 전용** |
 
 - **사진 피커는 플랫폼마다 완전히 다르다**(iOS PHPicker / Android Photo Picker).
   하나의 플로우로 양쪽을 몰지 않는다. Android 사진 경로는 손으로 확인한다.
