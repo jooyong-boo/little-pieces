@@ -9,9 +9,11 @@ appId: com.littlepieces.app
 
 # clearState는 iOS Keychain을 지우지 않아 이전 실행의 토큰이 남는다
 # (재설치해도 로그인이 유지되는 실제 동작). 남아 있으면 먼저 로그아웃한다.
+# 조건을 탭바로 잡는다. 타임라인 화면만 보면, 앱이 지도/설정 탭에 남아 있을 때
+# 로그인 상태인데도 조건이 안 걸려 다음 단계가 깨진다.
 - runFlow:
     when:
-      visible: '우리의 조각들'
+      visible: '설정'
     commands:
       - tapOn: '설정'
       - scrollUntilVisible:
@@ -76,6 +78,10 @@ appId: com.littlepieces.app
 - assertVisible: '테스터 기록'
 
 # 상세는 탭바 위에 쌓이므로 먼저 빠져나온다.
+# 작은 화면에서는 버튼이 접혀 있을 수 있다. 여기엔 키보드가 없어 스크롤이 안전하다.
+- scrollUntilVisible:
+    element:
+      text: '뒤로'
 - tapOn: '뒤로'
 - tapOn: '설정'
 - assertVisible: '초대 코드'

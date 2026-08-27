@@ -3,6 +3,7 @@ import '@/global.css';
 
 import { QueryClientProvider } from '@tanstack/react-query';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { ActivityIndicator, Text, useColorScheme, View } from 'react-native';
@@ -10,10 +11,22 @@ import { ActivityIndicator, Text, useColorScheme, View } from 'react-native';
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { Button } from '@/components/button';
 import { useCouple } from '@/hooks/use-couple';
+import { useLogout } from '@/hooks/use-logout';
 import { useAuthStore } from '@/lib/auth-store';
 import { queryClient } from '@/lib/query-client';
 
 SplashScreen.preventAutoHideAsync();
+
+// 기본값은 앱이 포그라운드일 때 알림을 조용히 넘긴다.
+// 파트너가 방금 올린 추억은 앱을 보고 있을 때도 알려주는 게 맞다.
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -80,7 +93,7 @@ function CenteredSpinner() {
 }
 
 function ConnectionError({ onRetry }: { onRetry: () => void }) {
-  const logout = useAuthStore((state) => state.logout);
+  const logout = useLogout();
 
   return (
     <View className="flex-1 justify-center gap-4 bg-white px-6">

@@ -2,10 +2,10 @@ import { Link } from 'expo-router';
 import { Text, View } from 'react-native';
 
 import { Button } from '@/components/button';
-import { useAuthStore } from '@/lib/auth-store';
+import { useLogout } from '@/hooks/use-logout';
 
 export default function OnboardingScreen() {
-  const logout = useAuthStore((state) => state.logout);
+  const logout = useLogout();
 
   return (
     <View className="flex-1 justify-center gap-6 bg-white px-6">

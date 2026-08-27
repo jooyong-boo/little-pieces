@@ -8,7 +8,7 @@ import { Button } from '@/components/button';
 import { ErrorText } from '@/components/error-text';
 import { FormField } from '@/components/form-field';
 import { useCouple, useLeaveCouple, useUpdateCouple } from '@/hooks/use-couple';
-import { useAuthStore } from '@/lib/auth-store';
+import { useLogout } from '@/hooks/use-logout';
 import { type Couple } from '@/lib/couple-api';
 import { calculateAnniversary } from '@/lib/dday';
 
@@ -26,7 +26,7 @@ type CoupleForm = z.infer<typeof coupleSchema>;
 
 export default function SettingsScreen() {
   const { data: couple, isPending } = useCouple();
-  const logout = useAuthStore((state) => state.logout);
+  const logout = useLogout();
 
   return (
     <SafeAreaView className="flex-1 bg-white" edges={['top']}>

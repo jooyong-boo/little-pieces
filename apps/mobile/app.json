@@ -44,11 +44,25 @@
           "cameraPermission": false,
           "microphonePermission": false
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#2563eb",
+          "defaultChannel": "default"
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "b8309346-29c2-4a65-935d-5cb06f162995"
+      }
+    },
+    "owner": "jooyonoboo"
   }
 }
