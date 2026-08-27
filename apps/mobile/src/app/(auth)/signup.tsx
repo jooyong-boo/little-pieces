@@ -2,10 +2,11 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
 import { Link } from 'expo-router';
 import { useForm } from 'react-hook-form';
-import { Text, View } from 'react-native';
+import { Text } from 'react-native';
 import { z } from 'zod';
 
 import { Button } from '@/components/button';
+import { FormScreen } from '@/components/form-screen';
 import { ErrorText } from '@/components/error-text';
 import { FormField } from '@/components/form-field';
 import { signupRequest } from '@/lib/auth-api';
@@ -38,7 +39,7 @@ export default function SignupScreen() {
   });
 
   return (
-    <View className="flex-1 justify-center gap-4 bg-white px-6">
+    <FormScreen>
       <Text className="mb-2 text-2xl font-bold">회원가입</Text>
 
       <FormField
@@ -62,6 +63,6 @@ export default function SignupScreen() {
       <Link href="/(auth)/login" className="text-center text-blue-600">
         이미 계정이 있으신가요? 로그인
       </Link>
-    </View>
+    </FormScreen>
   );
 }

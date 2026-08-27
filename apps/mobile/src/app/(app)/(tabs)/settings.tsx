@@ -30,7 +30,12 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-white" edges={['top']}>
-      <ScrollView contentContainerClassName="gap-6 px-6 py-6">
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets
+        contentContainerClassName="gap-6 px-6 py-6"
+      >
         <Text className="text-2xl font-bold">설정</Text>
 
         {isPending ? <ActivityIndicator /> : null}

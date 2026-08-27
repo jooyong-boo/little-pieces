@@ -1,10 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { router } from 'expo-router';
 import { useForm } from 'react-hook-form';
-import { Text, View } from 'react-native';
+import { Text } from 'react-native';
 import { z } from 'zod';
 
 import { Button } from '@/components/button';
+import { FormScreen } from '@/components/form-screen';
 import { ErrorText } from '@/components/error-text';
 import { FormField } from '@/components/form-field';
 import { useJoinCouple } from '@/hooks/use-couple';
@@ -26,7 +27,7 @@ export default function JoinCoupleScreen() {
   const onSubmit = (values: JoinForm) => mutation.mutate(values.inviteCode);
 
   return (
-    <View className="flex-1 justify-center gap-4 bg-white px-6">
+    <FormScreen>
       <Text className="mb-2 text-2xl font-bold">초대 코드 입력</Text>
       <Text className="text-gray-600">상대가 알려준 6자리 코드를 입력해주세요.</Text>
 
@@ -43,6 +44,6 @@ export default function JoinCoupleScreen() {
 
       <Button title="참여하기" isLoading={mutation.isPending} onPress={handleSubmit(onSubmit)} />
       <Button title="뒤로" variant="secondary" onPress={() => router.back()} />
-    </View>
+    </FormScreen>
   );
 }

@@ -26,7 +26,12 @@ export default function MemoryDetailScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-white">
-      <ScrollView contentContainerClassName="gap-4 px-6 py-6">
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets
+        contentContainerClassName="gap-4 px-6 py-6"
+      >
         <Text className="text-2xl font-bold">추억 수정</Text>
 
         {query.isPending ? <ActivityIndicator /> : null}

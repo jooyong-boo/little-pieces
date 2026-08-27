@@ -33,6 +33,7 @@ appId: com.littlepieces.app
 - inputText: 'password123'
 - tapOn: '닉네임'
 - inputText: '테스터'
+# 키보드를 닫아야 버튼이 드러난다. 제목은 터치 핸들러가 없어 탭이 키보드 닫기로 간다.
 - tapOn: '회원가입'
 - tapOn: '가입하기'
 
@@ -42,6 +43,7 @@ appId: com.littlepieces.app
 
 - tapOn: '예: 우리 둘'
 - inputText: '우리'
+# 키보드를 닫아야 버튼이 드러난다. 제목은 터치 핸들러가 없어 탭이 키보드 닫기로 간다.
 - tapOn: '공간 만들기'
 - tapOn: '만들기'
 
@@ -57,6 +59,7 @@ appId: com.littlepieces.app
 - inputText: '첫 산책'
 - tapOn: '예: 성수동'
 - inputText: '한강'
+# 키보드를 닫아야 버튼이 드러난다. 제목은 터치 핸들러가 없어 탭이 키보드 닫기로 간다.
 - tapOn: '추억 남기기'
 - tapOn: '저장'
 

@@ -30,6 +30,7 @@ appId: com.littlepieces.app
 
 - tapOn: '예: 첫 데이트'
 - inputText: '지도에 찍은 추억'
+# 키보드를 닫아야 버튼이 드러난다. 제목은 터치 핸들러가 없어 탭이 키보드 닫기로 간다.
 - tapOn: '추억 남기기'
 - tapOn: '저장'
 

@@ -1,10 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { router } from 'expo-router';
 import { useForm } from 'react-hook-form';
-import { Text, View } from 'react-native';
+import { Text } from 'react-native';
 import { z } from 'zod';
 
 import { Button } from '@/components/button';
+import { FormScreen } from '@/components/form-screen';
 import { ErrorText } from '@/components/error-text';
 import { FormField } from '@/components/form-field';
 import { useCreateCouple } from '@/hooks/use-couple';
@@ -37,7 +38,7 @@ export default function CreateCoupleScreen() {
     });
 
   return (
-    <View className="flex-1 justify-center gap-4 bg-white px-6">
+    <FormScreen>
       <Text className="mb-2 text-2xl font-bold">공간 만들기</Text>
 
       <FormField control={control} name="name" label="이름" placeholder="예: 우리 둘" />
@@ -53,6 +54,6 @@ export default function CreateCoupleScreen() {
 
       <Button title="만들기" isLoading={mutation.isPending} onPress={handleSubmit(onSubmit)} />
       <Button title="뒤로" variant="secondary" onPress={() => router.back()} />
-    </View>
+    </FormScreen>
   );
 }
