@@ -32,19 +32,105 @@
 
 배포가 끝나야 실사용이 시작되고, 그래야 "무엇이 진짜 거슬리는지"를 추측이 아니라 경험으로 알 수 있다.
 
-### 정해야 할 것
+### 이미 준비돼 있다 (코드를 읽고 확인함 — 손대지 마라)
 
-- **DB** — Supabase(Storage까지 묶기 쉬움) vs Neon(scale-to-zero, 개인 프로젝트에 덜 성가심).
-  코드는 `DATABASE_URL` 교체로 끝난다.
-- **API 호스팅** — Fly.io / Railway / Render. Rust 바이너리 하나라 가볍다.
-- **이미지** — R2 계정 생성. 지금 MinIO와 **같은 S3 호환 코드**라 `.env` 5줄만 바뀐다.
-- **앱 배포** — EAS 빌드. keystore는 이미 등록돼 있다.
+| 위치                                   | 확인된 것                                                               |
+| -------------------------------------- | ----------------------------------------------------------------------- |
+| `apps/api/src/main.rs:58`              | `0.0.0.0:$PORT` 바인딩 — 어떤 호스팅이든 그대로 붙는다                  |
+| `apps/api/src/main.rs:29`              | 시작 시 `sqlx::migrate!()` 자동 실행 — 별도 마이그레이션 단계가 없다    |
+| `apps/api/Cargo.toml:17`               | sqlx에 `tls-rustls` — 관리형 Postgres에 바로 붙는다                     |
+| `apps/api/src/storage.rs:38`           | `UrlStyle::Path` — R2가 코드 변경 없이 동작한다                         |
+| `apps/api/src/config.rs:36`            | S3 5개 중 하나라도 없으면 **사진만** 죽고 서버는 뜬다                   |
+| `apps/mobile/app.config.js:7`          | `ALLOW_CLEARTEXT`가 기본 꺼짐 — **"배포 시 끈다"는 이미 끝난 항목이다** |
+| `apps/mobile/src/lib/api-client.ts:58` | 401 → 자동 로그아웃 — `JWT_SECRET`을 갈아도 재로그인으로 끝난다         |
+| `apps/api/scripts/e2e.sh:8`            | `API_URL`로 대상 서버를 바꾼다 — 배포된 주소에 그대로 겨눌 수 있다      |
 
-### 배포 시 반드시 손봐야 할 것
+### Phase 1 — Neon
 
-- `ALLOW_CLEARTEXT`를 **끈다.** 평문 HTTP 예외는 로컬 개발 서버용이고 프로덕션 API는 HTTPS다.
-- `apps/mobile/.env`의 `EXPO_PUBLIC_API_URL`을 배포 주소로. 지금은 맥의 LAN IP다.
+**DB는 Neon으로 정했다.**
+
+**direct(unpooled) 엔드포인트**를 써야 한다. 풀러(PgBouncer transaction 모드)를 쓰면
+`query_as!`가 의존하는 prepared statement가 깨진다. `db.rs:5`가 `max_connections(5)`라
+풀러가 애초에 불필요하다.
+
+`apps/api/.env`의 `DATABASE_URL`을 갈고 `pnpm api:dev` — 마이그레이션 4개가 알아서 적용된다.
+
+> `query_as!`는 **컴파일 시점에** `DATABASE_URL`이 가리키는 DB에 붙는다. Neon으로 갈면
+> `cargo build`가 Neon을 보게 되고 오프라인에서는 빌드가 막힌다. 빈 Neon DB에서
+> NULL 추론 문제(아래 "코드에서 배운 것")가 재현될 수 있다 — `AS "컬럼!"`으로 못 박아뒀으니
+> 통과해야 정상이고, 여기서 깨지면 원인은 그것이다.
+
+### Phase 2 — R2
+
+버킷 `little-pieces`를 만들고 **비공개로 둔다** — `storage.rs:60`의 presigned GET으로만 읽는
+설계다. Object Read & Write 토큰을 발급해 `apps/api/.env`의 다섯 줄만 갈아끼운다
+(`.env.example`에 R2 기준 주석이 이미 있다). `S3_REGION=auto`는 그대로 둔다.
+
+검증은 `./apps/api/scripts/e2e.sh`가 사진 바이트 왕복까지 이미 한다.
+
+### Phase 3 — API 호스팅 ← **유일한 미결**
+
+Neon과 R2가 원격이 되면 **API는 상태 없는 프로세스 하나**다. 어디서 돌든 데이터는 안전하고,
+나중에 옮기는 건 바이너리를 옮기는 일이다. 그래서 이 선택은 되돌리기 싸다.
+
+**경로 A — 노트북 + Cloudflare Tunnel (0원)**
+
+`cloudflared`가 `localhost:3000`에 고정 HTTPS 주소를 붙인다. 아웃바운드 연결이라
+포트포워딩·고정 IP가 필요 없고 네트워크가 바뀌어도 견딘다.
+09:00 알림을 살리려면 맥을 깨운다: `sudo pmset repeat wakeorpoweron MTWRFSU 08:55:00`.
+
+**받아들이는 한계: 맥이 자면 앱이 안 된다.** 이 경로는 Dockerfile도 `.sqlx` 캐시도 필요 없다.
+
+**경로 B — 클라우드 상시 가동 (월 2~3달러 수준, 가입 시 요금 확인)**
+
+경로 A에 없는 작업이 붙는다:
+
+- **`.sqlx` 오프라인 캐시가 지금 없다.** `query_as!`가 컴파일 시점 DB를 요구해서
+  **이게 없으면 Docker 빌드가 아예 불가능하다.** `cargo install sqlx-cli --version ^0.9`
+  (크레이트 버전과 맞춰야 한다) → `cd apps/api && cargo sqlx prepare` → `.sqlx/`를 커밋.
+- **Dockerfile** — `SQLX_OFFLINE=true`, 그리고 **`COPY migrations`를 `cargo build`보다 먼저.**
+  `sqlx::migrate!()`가 컴파일 시점에 마이그레이션을 바이너리에 임베드한다.
+- **CI에 `cargo sqlx prepare --check`를 추가한다.** 없으면 캐시가 조용히 낡고
+  CI가 아니라 **배포가** 깨진다.
+- **scale-to-zero / 자동 슬립을 끈다.** 스케줄러가 in-process `sleep`이라
+  (`anniversary.rs:110`) 머신이 자면 09:00 알림이 죽는다. 취향이 아니라 제약이다.
 - `JWT_SECRET`을 새로 발급한다.
+
+### Phase 4 — 앱을 새 주소로
+
+`apps/mobile/.env`의 `EXPO_PUBLIC_API_URL`을 HTTPS 주소로 바꾸고 릴리스 빌드를 폰에 설치한다.
+`ALLOW_CLEARTEXT`는 **주지 않는다** — HTTPS다.
+
+> `EXPO_PUBLIC_API_URL`은 **빌드 시점에 박힌다.** Phase 3에서 주소가 확정된 다음에 밟아야 한다.
+> `app.config.js`를 건드렸다면 `expo prebuild`를 따로 돌린다(아래 "환경" 함정).
+
+### 앱 배포를 재개할 때 (지금은 보류)
+
+EAS 배포는 미뤘다. 재개하는 세션이 밟을 지뢰들이다 —
+**전부 빌드는 초록으로 성공하고 폰에서 기능만 조용히 죽는다.**
+
+- **`google-services.json`이 gitignore다.** EAS는 git으로 소스를 올려서 클라우드 prebuild가
+  파일을 못 본다 → `app.config.js:14`의 `hasFirebase`가 `false` → FCM이 매니페스트에 안 들어감
+  → **Android 푸시 토큰 발급 자체가 실패한다.** 대시보드 설정이 아니라 **`app.config.js` 코드
+  수정**이 필요하다 — EAS file-type 시크릿 경로를 env로 읽고 지금의 로컬 파일 검사를 fallback으로.
+- **Maps Android 키의 SHA-1이 debug keystore 것이다.** EAS 서명 키로 빌드하면 SHA-1이 달라
+  Android 지도가 회색으로 뜬다. 순서를 지켜야 두 번 등록하지 않는다:
+  **keystore 재발급 → `eas credentials`로 SHA-1 확인 → Google Cloud에 등록.**
+- **`eas.json`의 `production`이 `{}`다.** 기본값이 AAB + store distribution이라
+  **사이드로드가 안 된다.** 둘이 쓸 거면 `distribution: "internal"` + `android.buildType: "apk"`.
+  최신 EAS CLI는 `cli.appVersionSource`도 요구한다.
+- **env가 gitignore된 `.env`에만 있다.** `EXPO_PUBLIC_API_URL`은 비밀이 아니니 `eas.json`의
+  프로필별 `env`에 넣고(버전 관리되는 편이 낫다), `GOOGLE_MAPS_ANDROID_KEY`는 EAS 시크릿으로.
+
+### 검증
+
+```bash
+curl https://<주소>/health
+API_URL=https://<주소> ./apps/api/scripts/e2e.sh   # 연동·격리·사진 왕복·타 커플 키 차단까지
+```
+
+폰에서는 **맥의 Wi-Fi에서 떼고**(LTE로) 로그인 → 추억 등록 → 사진 → 지도까지.
+이게 이번 작업의 통과 조건이다.
 
 ---
 
@@ -69,6 +155,8 @@
 - 폼이 열린 채 백그라운드 refetch — 방금 올린 사진이 로컬 `file://`에 머문다.
   저장 후 바로 `router.back()`이라 닿기 어렵다. 폼을 `query.data.id`로 keying하면 해결.
 - 스케줄러: 서버가 09:00에 꺼져 있으면 그날은 건너뛴다. 2월 29일 추억은 평년에 울리지 않는다.
+  **다만 앞의 절반은 더 이상 미룰 수 있는 항목이 아니다** — in-process `sleep`이라
+  호스팅이 자면 알림이 죽는다. Phase 3의 선택을 제약한다.
 - Android 탭 아이콘 — iOS SF Symbol만 줘서 Android는 라벨만 나온다.
 
 ---
