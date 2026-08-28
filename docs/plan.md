@@ -1,336 +1,143 @@
-# little-pieces 2차 — 사진 업로드 (그리고 한글 경로 정리)
+# little-pieces — 현황과 다음 단계
 
-## Context
+커플이 날짜·장소·사진으로 추억을 쌓는 모바일 앱. Expo(RN) + Rust(Axum) 모노레포.
+**이 문서는 새 세션이 이어받는 지점이다.** 끝난 단계의 구현 절차는 git 히스토리에 있다.
 
-1차(인증 + 커플 연동 + 추억 CRUD + 타임라인)는 완료됐다. 커밋 7개가 로컬 `little-pieces` 브랜치에 있고, Rust 20 / jest 16 / API E2E 26 / Maestro 앱 플로우까지 통과했다. (원격 `main`은 아직 NestJS 트리 `6ddfa0d` — 교체는 별건이고 2차 의존성이 아니다.)
+## 어디까지 됐나
 
-2차는 사진 업로드다. 날짜·장소·메모만 있는 추억은 얇고, 커플 앱에서 사진은 부가 기능이 아니라 본체에 가깝다.
+기획한 기능(커플 연동 / 날짜·장소·사진 / 추억맵 / 알림)은 **전부 동작한다.**
 
-**순서를 로드맵과 바꾼 이유**: 검증 가능 범위가 기능마다 다르다.
+| 기능                              | iOS           | Android        |
+| --------------------------------- | ------------- | -------------- |
+| 인증·커플 연동·추억 CRUD·타임라인 | ✅            | ✅             |
+| 사진 업로드 (presigned PUT)       | ✅            | ✅             |
+| 추억맵 (마커 + 방문일 순 경로선)  | ✅ Apple Maps | ✅ Google Maps |
+| 파트너 추억 등록 알림             | 코드만        | ✅ 실기기 수신 |
+| "n년 전 오늘" (매일 09:00 KST)    | 코드만        | ✅ 실기기 수신 |
 
-| 기능       | 시뮬레이터 검증                                                            |
-| ---------- | -------------------------------------------------------------------------- |
-| **이미지** | 전부 가능 (피커 → presigned PUT → 표시). Maestro로도 구동                  |
-| 지도       | iOS는 Apple Maps로 키 없이 렌더. Android는 Google Maps 키 없이는 확인 불가 |
-| 푸시       | EAS `projectId` 필요 + APNs 등록은 시뮬레이터 불가 → 실기기 필요           |
+검사: Rust 38 / jest 41 / API E2E 42 / Maestro iOS 3개 + Android 2개.
+원격 `main`은 최신. 기존 NestJS 코드는 `legacy-nest` 브랜치에 보존.
 
-1차에서 실기기 구동이 정적 검사가 전부 통과시킨 버그 3개를 잡았다. 증명 가능한 것부터 가는 게 그 교훈이다. 이미지 → 지도 → 푸시.
-
-### 확정된 결정
-
-| 항목      | 결정                                                                 |
-| --------- | -------------------------------------------------------------------- |
-| 경로      | `개인플젝` → `little-pieces`로 rename. **네이티브 빌드의 선결 조건** |
-| 2차 범위  | 이미지만. 지도·푸시는 각각 별 단계                                   |
-| 스토리지  | S3 호환. 로컬은 **MinIO**(docker), 배포는 R2 — env 3줄 차이          |
-| Rust S3   | `rusty-s3` 0.10.2                                                    |
-| 푸시 검증 | 실기기 iPhone 있음 → 3단계에서 활용                                  |
-
-### 검증한 사실 (추측 아님)
-
-- `rusty-s3` 0.10.2 — 기본 feature가 `rustcrypto`(순수 Rust, C 툴체인 불필요)라 sqlx의 `tls-rustls`와 충돌 없음. Sans-IO라 HTTP 클라이언트를 안 끌고 옴. `bucket.put_object(Some(&creds), key).sign(duration)` → presigned URL. MinIO 호환성을 커밋마다 CI로 검증하는 크레이트.
-- `expo-image-picker` 57.0.13 — `launchImageLibraryAsync({ allowsMultipleSelection, selectionLimit, quality, mediaTypes })`. asset에 `uri`, `mimeType?`, `fileName?`, `fileSize?`. **`mimeType`이 optional이라 폴백이 필요하다.**
-- `expo-file-system` 57.0.5 — `new File(uri).upload(url, { httpMethod: 'PUT', headers })`. 기본 `uploadType`이 `BINARY_CONTENT`. **비2xx도 reject가 아니라 resolve하므로 `result.status`를 직접 봐야 한다.** 지금은 transitive 의존성이라 명시적으로 추가해야 함.
-- 플러그인 옵션: `["expo-image-picker", { photosPermission, cameraPermission: false, microphonePermission: false }]` — `false`는 해당 권한을 아예 막는다. 사진 라이브러리만 쓰므로 카메라·마이크는 막는다.
-- CocoaPods 1.16.2, Ruby `default_external`은 이미 UTF-8인데도 실패 → CocoaPods가 명령 출력을 BINARY로 강제하는 것이라 환경변수로는 못 푼다. 경로 변경이 유일한 해법.
+**iOS 푸시만 미검증** — 유료 Apple Developer Program이 유일한 관문이다. 코드는 Android와
+같은 경로를 타므로 계정이 생기면 iPhone 17(페어링됨)으로 확인만 하면 된다.
 
 ---
 
-## 진행 상황 (2026-08-27) — 4차(푸시)까지 완료
+## 다음 단계: 배포
 
-- [x] 1차 기본, 2차 사진, 3차 지도(iOS + Android)
-- [x] **4차 푸시 — Android 실기기 수신까지 확인**
-- [x] **"n년 전 오늘" — 실기기 수신 확인** (1년 전 날짜의 추억으로 검증)
-- [ ] iOS 푸시 실수신 — 유료 Apple Developer Program 필요. 코드는 같은 경로를 타지만 **미검증**
-- [ ] 원격 `main` 교체 — 아직 NestJS 트리(`6ddfa0d`)
+### 왜 이게 먼저인가
 
-### 갤럭시 A15에서 실제로 확인한 것
+**지금 앱은 이 맥에서만 돈다.** API가 `localhost:3000`이고 폰은 같은 Wi-Fi일 때만 붙는다.
+맥을 끄면 앱이 죽는다 — 즉 **둘이 실제로 쓸 수 없다.** 다른 어떤 개선보다 앞선다.
 
-1. **토큰 발급·저장** — `ExponentPushToken[...]`이 `push_tokens`에 저장됨
-2. **알림 수신** — 파트너가 추억을 올리자 폰에 도착
-   (`android.title = 새 추억이 등록됐어요`, 본문은 추억 제목, `channel=default`)
-3. **알림 탭 → 해당 추억 상세로 이동**
-4. **작성자 제외** — 자기가 올린 추억은 자기에게 오지 않음 (알림 0건)
+배포가 끝나야 실사용이 시작되고, 그래야 "무엇이 진짜 거슬리는지"를 추측이 아니라 경험으로 알 수 있다.
 
-### "n년 전 오늘" 설계
+### 정해야 할 것
 
-- **매일 오전 9시(KST)**. `visited_at`이 `DATE`라 "오늘"이 시간대에 따라 갈리므로 기준 시간대를 KST로 못 박았다.
-- **정확히 n년 전만.** 월/일이 같고 연도가 이전인 추억. "월/일만 같으면 전부"로 하면 추억이 쌓일수록 거의 매일 알림이 온다.
-- **커플 두 사람 모두에게.** 파트너 알림(작성자 제외)과 대상이 다르다 — 함께 만든 추억이라 작성자도 떠올릴 대상이다.
-- **발송 시각 계산이 곧 중복 방지다.** 보낸 직후 재시작해도 "오늘 9시"는 지났으므로 다음 차례가 내일이 된다. 별도 발송 기록 테이블이 필요 없다.
-- 미룬 것: 서버가 9시에 꺼져 있으면 그날은 건너뛴다. 2월 29일 추억은 평년에 울리지 않는다.
+- **DB** — Supabase(Storage까지 묶기 쉬움) vs Neon(scale-to-zero, 개인 프로젝트에 덜 성가심).
+  코드는 `DATABASE_URL` 교체로 끝난다.
+- **API 호스팅** — Fly.io / Railway / Render. Rust 바이너리 하나라 가볍다.
+- **이미지** — R2 계정 생성. 지금 MinIO와 **같은 S3 호환 코드**라 `.env` 5줄만 바뀐다.
+- **앱 배포** — EAS 빌드. keystore는 이미 등록돼 있다.
 
-### Android 푸시 설정 (완료)
+### 배포 시 반드시 손봐야 할 것
 
-- Firebase 프로젝트 `little-pieces-9b1bf`, `google-services.json`은 gitignore
-- EAS 프로젝트 `@boojooyong/little-pieces` (`fb81fb40-37be-4507-abad-8ee9a20d1560`)
-- FCM V1 서비스 계정 키를 Expo에 등록
+- `ALLOW_CLEARTEXT`를 **끈다.** 평문 HTTP 예외는 로컬 개발 서버용이고 프로덕션 API는 HTTPS다.
+- `apps/mobile/.env`의 `EXPO_PUBLIC_API_URL`을 배포 주소로. 지금은 맥의 LAN IP다.
+- `JWT_SECRET`을 새로 발급한다.
 
-**주의: `app.json`의 `owner`가 프로젝트 소유 계정을 결정한다.** 회사 계정으로 박혀 있어
-`eas init`이 계속 그쪽을 보고 개인 계정 토큰으로는 권한 오류가 났다.
+---
 
-**Expo 대시보드의 "Google Service Account Key" 슬롯은 두 개다.** 마법사 4단계의 것은
-**Play 스토어 업로드용**이고, FCM 푸시용은 마법사 완료 후 나타나는
-"FCM V1 service account key" 슬롯이다.
+## 배포 후에 볼 것 (실사용해보고 정한다)
 
-### 서명 keystore (중요)
+- **날짜를 손으로 타이핑한다** (`YYYY-MM-DD`). 네이티브 날짜 피커로 바꾸는 게 첫 후보.
+- **역지오코딩** — 핀을 찍으면 `placeName`이 자동으로 채워지면 좋다. Geocoding API 요금이 붙는다.
+- **서버측 이미지 리사이즈** — `quality: 0.7`을 줘도 HEIC 원본이 2.7MB로 올라가는 것을 확인했다.
+  사진이 쌓이면 이게 비용의 대부분이 된다.
 
-`apps/mobile/credentials/upload.jks` — EAS에 등록됨(SHA-1 `58:66...88:31`). gitignore 대상.
-**잃어버리면 스토어 업데이트를 올릴 수 없다.** 별도 백업 필요.
-아직 아무것도 서명하지 않았으므로 실제 배포 전이라면 재생성해도 비용이 없다.
+---
 
----------------------- | --- | ------------ |
-| `signup-to-memory` | ✅ | ✅ |
-| `memory-with-location` | ✅ | ✅ |
-| `memory-with-image` | ✅ | **iOS 전용** |
+## 미루는 것 (지금 손대면 낭비)
 
-- **사진 피커는 플랫폼마다 완전히 다르다**(iOS PHPicker / Android Photo Picker).
-  하나의 플로우로 양쪽을 몰지 않는다. Android 사진 경로는 손으로 확인한다.
-- **지도 마커의 접근성 표현도 다르다**(MapKit vs Google Maps). 마커 라벨로 단정하지 않고
-  "빈 상태 안내가 사라졌다"를 플랫폼 중립적 증거로 쓴다.
+둘이 쓰는 규모에서는 영향이 없다. 공개 서비스로 갈 때 다시 본다.
+
+- 고아 객체 정리 — 작성 취소/사진 제거 시 R2 객체가 남는다. 개발 중 이미 몇 개 쌓였다.
+- `POST /memories/upload-url` 레이트 리밋 — 인증 유저가 반복 호출해 객체를 무한정 넣을 수 있다.
+- 마커 클러스터링, 이미지 순서 재배치, 업로드 진행률 합산 UI.
+- `+` 버튼 연타 — 두 호출이 같은 남은 칸 수를 보고 10장을 넘길 수 있다. `addImage`가 잘라내므로
+  데이터는 안 깨지고 초과분만 버려진다. 업로드 중 버튼 비활성화면 끝난다.
+- 폼이 열린 채 백그라운드 refetch — 방금 올린 사진이 로컬 `file://`에 머문다.
+  저장 후 바로 `router.back()`이라 닿기 어렵다. 폼을 `query.data.id`로 keying하면 해결.
+- 스케줄러: 서버가 09:00에 꺼져 있으면 그날은 건너뛴다. 2월 29일 추억은 평년에 울리지 않는다.
+- Android 탭 아이콘 — iOS SF Symbol만 줘서 Android는 라벨만 나온다.
+
+---
+
+## 다시 겪으면 시간을 버릴 함정들
+
+실제로 부딪혀서 알아낸 것들이다. **추측이 아니라 관찰된 사실만 적는다.**
+
+### 환경
+
+- **경로에 한글이 있으면 `pod install`이 실패한다.** `hermes-engine.podspec`에서
+  인코딩 충돌(BINARY vs UTF-8). `LANG`/`RUBYOPT`로는 안 풀린다. cargo/jest/lint/`expo export`는
+  한글 경로에서도 정상 — **iOS 네이티브 빌드만** 막힌다.
+- **Android 개발 빌드는 저사양 기기에서 시작에 14초**(번들 4.3초 + 렌더 8.4초), **릴리스는 0.9초.**
+  실기기 확인은 릴리스 빌드로 하는 편이 빠르고 안정적이다.
+- **Android 릴리스는 평문 HTTP를 차단한다.** `ALLOW_CLEARTEXT=1`일 때만 켜지는 opt-in으로 뒀다.
+- **실기기는 `localhost`로 맥에 못 닿는다.** `10.0.2.2`는 에뮬레이터 전용. 맥의 LAN IP를 쓴다.
+- **`app.config.js`를 바꾸면 `expo prebuild`를 따로 돌려야 한다.** `android/`가 이미 있으면
+  `expo run:android`가 config를 다시 반영하지 않아 매니페스트에 조용히 안 들어간다.
+- Expo/EAS 로그인은 **액세스 토큰**(`~/.expo-token`, `EXPO_TOKEN`)으로 한다. 비밀번호가 필요 없다.
+
+### 계정·자격증명
+
+- **`app.json`의 `owner`가 EAS 프로젝트 소유 계정을 결정한다.** 회사 계정으로 박혀 있어
+  `eas init`이 계속 그쪽을 보고 개인 계정 토큰으로는 권한 오류가 났다. 오늘 헤맨 주된 이유.
+- **Expo 대시보드의 "Google Service Account Key" 슬롯은 두 개다.** 마법사 4단계는
+  **Play 스토어 업로드용**이고, FCM 푸시용은 마법사 완료 후 나타나는 별도 슬롯이다.
+- **Android 푸시에는 Firebase(FCM) 설정이 필요하다.** 무료지만 `google-services.json` +
+  Expo에 등록한 FCM V1 서비스 계정 키가 있어야 토큰 발급 자체가 된다.
+- **`google-services.json`과 `credentials/`는 gitignore.** 전자는 APK에 그대로 들어가 비밀은
+  아니지만 공개 레포에서 긁히기 쉽다. 후자는 진짜 비밀이다.
+- **Maps Android 키의 SHA-1은 공용 debug 키스토어 것이다**(생성일 2014-01-01, RN/Expo 템플릿 배포).
+  제한이 실질적으로 막는 건 패키지명 하나뿐. 실제 보호는 배포용 키스토어 SHA-1을 등록할 때 생긴다.
+
+### 코드에서 배운 것
+
+- **`sqlx`의 NULL 추론은 쿼리 플랜에 의존한다.** 테이블에 데이터가 쌓이자 LEFT JOIN 왼쪽
+  컬럼까지 nullable로 보기 시작해 빌드가 깨졌다. **빈 DB에서만 컴파일되던 코드였다.**
+  `AS "컬럼!"`으로 못 박는다.
+- **`EXTRACT`는 NUMERIC을 돌려준다.** int로 캐스팅해야 파라미터 타입이 맞는다.
+- **`Link asChild`가 넣는 `onPress`를 `View`는 무시한다.** `Pressable`이어야 한다.
+- **`Pressable`은 자식 텍스트를 접근성 요소 하나로 합친다.** `accessibilityLabel`을 명시하지 않으면
+  이모지까지 읽힌다.
+- **`fitToCoordinates`는 마운트 직후 호출에서 효과가 없었다**(이유는 미확인). 첫 화면은
+  `regionForCoordinates()`로 계산해 `initialRegion`에 넣어 시점에 의존하지 않게 했다.
+- **중앙 고정 핀은 이모지로 만들지 않는다.** 글리프 안에서 뾰족한 끝 위치가 폰트마다 달라
+  보이는 지점과 저장되는 좌표가 어긋난다. 원은 중심이 곧 지점이다.
+- **NativeWind는 `global.css`를 import해야 동작한다.** css-interop의 변환이 `resolveRequest`에서만
+  걸려서, import가 없으면 스타일이 하나도 등록되지 않는다(번들은 성공한다).
+- **키보드가 제출 버튼을 덮는다.** iOS 시뮬레이터는 하드웨어 키보드라 안 드러난다.
+  `keyboardShouldPersistTaps="handled"`가 없으면 모든 폼에서 첫 탭이 버려진다.
+
+### Maestro
+
+- **`--device`로 기기를 명시한다.** iOS 시뮬레이터와 Android가 함께 붙어 있으면 엉뚱한 쪽으로 간다.
+- **키보드가 떠 있을 때 `scrollUntilVisible`을 쓰지 않는다.** 스와이프가 키보드 위를 지나며
+  입력칸에 오타를 남긴다(장소에 `한강g`가 들어갔다).
 - **로그아웃 조건은 탭바로 잡는다.** 타임라인 화면만 보면 앱이 지도/설정 탭에 남아 있을 때
   로그인 상태인데도 조건이 안 걸린다.
-- **알림 권한 팝업이 플로우를 가린다.** 커플 연결 직후(의도한 시점)에 뜨므로 그 자리에서 치운다.
-- **작은 화면에서는 버튼이 접힌다.** 갤럭시 A15에서 상세의 '뒤로'가 화면 밖이었다.
-  단, **키보드가 떠 있을 때 스크롤하면 안 된다** — 스와이프가 키보드 위를 지나며 오타를 남긴다.
+- **알림 권한 팝업이 플로우를 가린다.** 커플 연결 직후(의도한 시점)에 뜬다.
+- **`clearState: true`는 iOS Keychain을 지우지 않는다.** 토큰이 남아 로그인 상태로 시작한다.
+- `memory-with-image.yaml`은 **iOS 전용** — 사진 피커가 플랫폼마다 완전히 다르다.
+  지도 마커의 접근성 표현도 다르므로 `memory-with-location.yaml`은 마커 라벨 대신
+  "빈 상태 안내가 사라졌다"로 확인한다.
 
 ---
 
-## 0단계 — 한글 경로 정리 (사용자 실행 + 세션 재시작)
-
-이 세션의 작업 디렉터리가 바로 그 한글 경로다. 이름을 바꾸는 순간 셸이 갈 곳을 잃으므로 **내가 실행할 수 없다.** Orca에서 이 프로젝트의 터미널/탭을 닫은 뒤 아래를 한 번에 실행하고, 새 경로에서 Claude Code를 다시 띄운 다음 "계속"이라고 하면 1단계부터 이어간다.
-
-```bash
-mv ~/orca/projects/개인플젝      ~/orca/projects/little-pieces
-mv ~/orca/workspaces/개인플젝    ~/orca/workspaces/little-pieces
-
-# 워크트리 링크는 양방향이다. 한쪽만 고치면 반대쪽이 옛 경로를 가리킨 채 남는다:
-#   <워크트리>/.git                        → projects/.../worktrees/little-pieces
-#   .git/worktrees/little-pieces/gitdir    → <워크트리>/.git
-# 양쪽에서 돌린다. 이미 맞으면 각각 no-op이다.
-git -C ~/orca/projects/little-pieces worktree repair \
-    ~/orca/workspaces/little-pieces/little-pieces
-git -C ~/orca/workspaces/little-pieces/little-pieces worktree repair
-
-cd ~/orca/workspaces/little-pieces/little-pieces
-# pnpm의 hoisted 레이아웃은 .bin 심링크에 절대경로를 굽는다
-rm -rf node_modules apps/mobile/ios apps/mobile/android
-pnpm install
-
-# 검증: 워크트리 자신이 정상인지를 본다.
-# main 쪽 `git worktree list`만 보면 워크트리가 깨져 있어도 멀쩡해 보일 수 있다.
-git status && git log --oneline -1
-```
-
-확인·부작용:
-
-- **Orca**는 `~/orca/projects/*`, `~/orca/workspaces/*` 디렉터리 구조를 그대로 쓴다. 경로가 박힌 건 통계·로그·터미널 히스토리(`~/Library/Application Support/orca/`)뿐이라 이름이 바뀌면 그것만 새로 쌓인다. 별도 레지스트리 수정은 불필요.
-- `target/`은 굳이 지우지 않는다 — cargo가 절대경로를 fingerprint에 포함하므로 필요한 것만 알아서 다시 빌드한다. 빌드가 이상하게 굴면 그때 `rm -rf target`.
-- Claude Code의 프로젝트 키가 바뀌므로 이전 세션 히스토리와 자동 메모리가 새 키로 갈린다. 새 세션이 만드는 디렉터리 이름을 `ls ~/.claude/projects/`로 확인한 뒤 옛 `memory/` 폴더를 그쪽으로 옮긴다(키 인코딩 규칙을 미리 예측하지 말 것).
-- `~/.claude.json`의 옛 경로 항목은 남지만 무해하다.
-- 이후 `apps/mobile/ios`는 `expo run:ios`가 prebuild로 다시 만든다.
-
-**완료 판정**: `cd apps/mobile && npx expo run:ios --device "iPhone 17 Pro"`가 `pod install`을 통과한다. 여기가 막히면 2단계 이후는 검증할 수 없으므로 진행하지 않는다.
-
----
-
-## 1단계 — 백엔드 스토리지 (`apps/api`)
-
-### 1-1. 의존성 · 설정
-
-`apps/api/Cargo.toml`
-
-```toml
-rusty-s3 = "0.10.2"
-```
-
-기본 feature(`rustcrypto` + `full`) 그대로 간다. `rustcrypto`만 남기면 크레이트 4개(xml/serde_json/md-5/base64)를 덜 받지만, SigV4 서명이 base64를 쓰고 그게 `full` 뒤에 가려져 있어 1단계 첫 빌드부터 깨질 소지가 있다. **일단 돌게 만들고, 트리밍은 통과한 뒤 선택 정리로 남긴다.**
-
-`config.rs` — `Config`에 `s3: Option<S3Config>` 추가. **전부 있으면 `Some`, 하나라도 없으면 `None`.** 스토리지 미설정 상태로도 서버가 뜨고 나머지 기능이 도는 게 중요하다(R2 계정이 아직 없다).
-
-`state.rs` — `AppState`에 `storage: Option<Storage>`.
-
-`.env.example` — MinIO 기준 기본값 + R2 전환 방법을 주석으로:
-
-```
-S3_ENDPOINT=http://localhost:9000
-S3_REGION=auto
-S3_BUCKET=little-pieces
-S3_ACCESS_KEY_ID=minioadmin
-S3_SECRET_ACCESS_KEY=minioadmin
-# R2로 갈 때: endpoint를 https://<account_id>.r2.cloudflarestorage.com 로,
-# 키를 R2 API 토큰으로. region은 auto 그대로. 코드 변경 없음.
-```
-
-`docker-compose.yml` — `minio` 서비스(9000/9001) + `mc mb`로 버킷을 만드는 일회성 `minio-init`. 5432가 이미 점유돼 5433으로 옮겼던 것처럼 9000이 겹치면 포트만 바꾼다.
-
-### 1-2. 마이그레이션
-
-`migrations/<ts>_add_memory_images.up.sql`
-
-```sql
-ALTER TABLE memories ADD COLUMN image_keys TEXT[] NOT NULL DEFAULT '{}';
-```
-
-1차에서 의도적으로 미뤘던 컬럼이다. `.down.sql`은 `DROP COLUMN`.
-
-### 1-3. `apps/api/src/storage.rs` (신규)
-
-`UrlStyle::Path`를 쓴다 — MinIO는 path-style이 필요하고 R2도 지원하므로 한 설정으로 둘 다 커버된다.
-
-```rust
-pub struct Storage { bucket: Bucket, credentials: Credentials, url_ttl: Duration }
-
-impl Storage {
-    pub fn from_env() -> Option<Self>
-    pub fn presign_put(&self, key: &str) -> String
-    pub fn presign_get(&self, key: &str) -> String
-}
-
-// 순수 함수 — 신뢰 경계 두 곳
-pub fn image_key(couple_id: Uuid, content_type: &str) -> Result<String, AppError>
-pub fn is_owned_by(couple_id: Uuid, key: &str) -> bool
-```
-
-**`image_key`** — content type 허용 목록으로만 확장자를 정한다(`image/jpeg`→`jpg`, `image/png`→`png`, `image/webp`→`webp`, `image/heic`→`heic`). 그 밖은 `UnsupportedImageType`. 키는 `couples/{couple_id}/{uuid}.{ext}` — **서버가 만든다.** 클라이언트가 키를 정하면 남의 객체를 덮어쓸 수 있다.
-
-**`is_owned_by`** — 여기가 이 단계에서 가장 중요한 검사다. 추억을 저장할 때 클라이언트가 보낸 `imageKeys`를 그대로 믿으면, A가 B 커플의 키를 적어 넣고 우리가 발급하는 presigned GET으로 남의 사진을 읽을 수 있다. `starts_with(prefix)`로 끝내지 않고 **`couples/<uuid>/<uuid>.<ext>` 형식을 정확히 파싱해서** 커플 ID가 일치하는지 본다(형식이 고정이라 `..` 같은 게 끼어들 여지가 없다).
-
-두 함수 모두 단위 테스트: 허용/거부 content type, 남의 커플 키, `..`가 섞인 키, 접두사만 비슷한 키(`couples/{id}x/...`), 확장자 없는 키.
-
-`error.rs`에 variant 추가: `StorageUnavailable`(503), `UnsupportedImageType`(400), `ForeignImageKey`(403).
-
-### 1-4. 엔드포인트와 응답
-
-**`POST /memories/upload-url`** — `CoupleMember`, body `{ contentType }`, 응답 `{ key, uploadUrl, expiresInSeconds }`.
-
-메모리 ID를 요구하지 않는 게 핵심이다. 신규 작성 화면에서는 추억이 아직 없으므로, ID를 요구하면 "추억 먼저 만들고 → 업로드 → 다시 수정" 3단이 된다. 커플 스코프 키만 있으면 신규·수정이 같은 경로를 쓴다.
-
-`memories/repo.rs`
-
-- `MemoryView`에 `image_keys: Vec<String>`(수정 화면 왕복용) + `image_urls: Vec<String>`(presigned GET, 표시용) 추가. R2/MinIO 버킷은 비공개라 표시에도 서명이 필요하다. 스토리지 미설정이면 `image_urls`는 빈 배열.
-- `MemoryInput`에 `image_keys: Vec<String>`.
-
-`memories/handlers.rs` — `MemoryRequest`에 `imageKeys: Option<Vec<String>>`. `to_input`에서 최대 10장 제한 + 전 항목 `is_owned_by` 검사.
-
-`routes.rs`에 라우트 하나 추가.
-
-### 1-5. E2E 확장 (`apps/api/scripts/e2e.sh`)
-
-기존 26개 체크에 이어서:
-
-1. `POST /memories/upload-url`로 URL 받기
-2. 받은 URL에 `curl -X PUT --upload-file`로 실제 이미지 바이트 업로드 → 2xx
-3. 그 키로 추억 저장 → `imageKeys`에 반영
-4. 응답의 `imageUrls[0]`를 `curl`로 GET → 업로드한 바이트와 **동일한지 비교**
-5. 허용되지 않는 `contentType`(`application/pdf`) → 400
-6. **다른 커플의 키를 넣어 저장 시도 → 403** (`is_owned_by`가 실제로 막는지)
-
----
-
-## 2단계 — 모바일 (`apps/mobile`)
-
-### 2-1. 의존성 · 권한
-
-```
-pnpm --filter mobile add expo-image-picker expo-file-system
-```
-
-`app.json` plugins에 추가:
-
-```json
-[
-  "expo-image-picker",
-  {
-    "photosPermission": "추억에 사진을 넣으려면 사진 접근 권한이 필요해요.",
-    "cameraPermission": false,
-    "microphonePermission": false
-  }
-]
-```
-
-카메라·마이크는 쓰지 않으므로 `false`로 아예 막는다.
-
-### 2-2. `src/lib/image-upload.ts` (신규)
-
-```ts
-pickImages(remainingSlots: number): Promise<PickedImage[]>   // launchImageLibraryAsync
-uploadPickedImage(image: PickedImage): Promise<string>        // → 서버 키
-resolveMimeType(image): string                               // 순수 함수 + 테스트
-```
-
-- `launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit, quality: 0.7 })`. 휴대폰 사진은 3~5MB라 `quality`로 줄인다.
-- **`asset.mimeType`은 optional이다.** `fileName` 확장자 → 그것도 없으면 `image/jpeg`로 폴백하는 순수 함수를 두고 테스트한다. 서버가 content type을 허용 목록으로 검사하므로 여기서 틀리면 400이 난다.
-- 업로드는 `new File(asset.uri).upload(uploadUrl, { httpMethod: 'PUT', headers: { 'Content-Type': mime } })`. **비2xx도 resolve하므로 `result.status`를 직접 확인하고 실패를 throw한다** — 안 하면 업로드 실패가 조용히 성공으로 넘어간다.
-- `memory-api.ts`에 `requestImageUploadUrl(contentType)` 추가 — 기존 `request()` 재사용.
-
-### 2-3. 업로드 시점
-
-**고른 즉시 업로드한다.** 저장 버튼이 즉시 끝나고 진행 상태를 사진별로 보여줄 수 있다. 대가는 사용자가 작성을 취소했을 때 남는 고아 객체인데, 정리 잡 없이 그냥 둔다(아래 "미루는 것").
-
-### 2-4. 화면
-
-- **`src/components/image-strip.tsx`** (신규) — 썸네일 가로 목록 + `+` 추가 + 각 항목 제거. 업로드 중 스피너, 실패 시 재시도. `expo-image`(이미 의존성)로 표시.
-- **`memory-form.tsx`** — `imageKeys` 상태를 들고 `ImageStrip`을 붙인다. 추가/제거는 순수 리듀서 함수로 빼고 테스트한다(10장 상한, 중복 방지).
-- **`(tabs)/index.tsx`** — 행에 첫 사진 썸네일. `memoryLabel()`에 "사진 N장"을 더해 스크린리더가 사진 유무를 알 수 있게 한다.
-- **`memory/[id].tsx`** — 사진 가로 스크롤 + 수정 시 `ImageStrip` 재사용.
-
-### 2-5. Maestro 플로우
-
-시뮬레이터 사진 라이브러리는 기본이 비어 있다. `xcrun simctl addmedia booted <파일>`로 먼저 씨딩한다.
-
-`apps/mobile/.maestro/memory-with-image.yaml` (신규) — 기존 `signup-to-memory.yaml`은 그대로 두고, 사진 경로만 별도 플로우로. 네이티브 사진 피커 모달을 거치므로 실패 지점이 다르다.
-
----
-
-## 미루는 것 (누락 아님)
-
-- **고아 객체 정리** — 작성 취소/사진 제거 시 R2 객체가 남는다. 개인 프로젝트 규모에서 무의미한 비용이고, 정리 잡은 스케줄러를 부른다. 지금은 남긴다.
-- **`POST /memories/upload-url` 레이트 리밋** — 호출마다 우리 버킷으로 쓸 수 있는 서명 URL이 하나 발급된다. 두 명이 쓰는 앱이라 실제 위협은 아니지만, 인증된 유저가 반복 호출해 객체를 무한정 넣을 수 있는 구조인 건 사실이다. 공개 서비스로 갈 때 커플당 시간당 상한을 건다.
-- 서버측 썸네일 생성/리사이즈 — `quality: 0.7`로 1차 완화.
-- 여러 장 동시 업로드 진행률 합산 UI — 사진별 상태만 보여준다.
-- 이미지 순서 재배치.
-- **`+` 버튼 연타** — 두 번 빠르게 누르면 두 호출이 같은 남은 칸 수를 보고, 합쳐서 10장을 넘길 수 있다.
-  `addImage`가 상한에서 잘라내므로 데이터가 깨지진 않지만 초과분은 업로드 비용만 쓰고 버려진다.
-  버튼을 업로드 중 비활성화하면 끝나는 문제라 필요해지면 그때 막는다.
-- **폼이 열려 있는 동안 백그라운드 refetch** — `MemoryForm`은 `initialImages`를 마운트 시점에만
-  `useState`로 받는다. 폼이 열린 채 쿼리가 다시 불려오면 방금 올린 사진이 로컬 `file://` uri에
-  머문다. 저장 후 바로 `router.back()`하므로 실제로 닿기 어렵지만, 닿는다면 폼을
-  `query.data.id`로 keying하는 한 줄이 해법이다.
-
----
-
-## 검증
-
-```bash
-# 0단계 완료 판정 (여기가 막히면 진행 안 함)
-cd apps/mobile && npx expo run:ios --device "iPhone 17 Pro"
-
-# 백엔드
-docker compose up -d db minio
-cd apps/api && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
-./apps/api/scripts/e2e.sh        # 기존 26개 + 이미지 6개
-
-# 모바일
-pnpm --filter mobile typecheck && pnpm --filter mobile lint
-pnpm --filter mobile test && pnpm --filter mobile format:check
-
-# 앱 실제 구동
-xcrun simctl addmedia booted <테스트이미지.jpg>
-maestro test -e EMAIL="me-$(date +%s)@test.com" apps/mobile/.maestro/signup-to-memory.yaml
-maestro test -e EMAIL="me-$(date +%s)@test.com" apps/mobile/.maestro/memory-with-image.yaml
-```
-
-E2E에서 반드시 통과해야 하는 두 가지:
-
-- **업로드한 바이트와 presigned GET으로 받은 바이트가 같다** — 서명·헤더·content type이 모두 맞았다는 유일한 증거
-- **다른 커플의 키로 저장 시도가 403** — 이게 뚫리면 남의 사진을 읽을 수 있다
-
-작업 중 `docs/plan.md`를 갱신한다(2차 진행 상황 + 남은 재검토 항목).
-
----
-
-## 다음 단계 (2차 이후)
-
-3. **지도** — `react-native-maps@1.29.0`(peer `react-native >= 0.76`, 우리 0.86 OK). `latitude/longitude`는 이미 저장 중. iOS는 Apple Maps로 키 없이 확인 가능, Android는 Google Maps 키 필요.
-4. **푸시** — `expo-notifications@57.0.14` + `push_tokens` 테이블 + Expo Push API. **EAS `projectId`를 먼저 만들어야 한다**(`app.json`에 `extra`가 없음). 실기기 iPhone으로 검증. "n년 전 오늘"(`EXTRACT`)은 이 배달 경로를 재사용하는 곁가지.
+## 사용자가 챙길 것
+
+**`apps/mobile/credentials/upload.jks` 백업.** gitignore라 레포에 없다.
+**잃어버리면 스토어 업데이트를 올릴 수 없다.** 비밀번호가 개발 세션 기록에 남았으므로,
+실제 배포 전이라면 재생성하는 편이 낫다 — 아직 아무것도 서명하지 않아 비용이 0이다.
