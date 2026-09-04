@@ -92,10 +92,21 @@ function MemoryRow({ memory }: { memory: Memory }) {
         accessibilityLabel={memoryLabel(memory)}
       >
         {memory.imageUrls[0] ? (
-          <Image
-            source={{ uri: memory.imageUrls[0] }}
-            style={{ width: 64, height: 64, borderRadius: 8 }}
-          />
+          // 썸네일은 첫 장만 그린다. 나머지가 있다는 사실은 배지로만 알린다 —
+          // 장수는 부모 Pressable의 접근성 라벨이 이미 말하므로(memoryLabel) 배지는 순전히 시각용이다.
+          <View className="h-16 w-16">
+            <Image
+              source={{ uri: memory.imageUrls[0] }}
+              style={{ width: '100%', height: '100%', borderRadius: 8 }}
+            />
+            {memory.imageKeys.length > 1 ? (
+              // imageUrls가 아니라 imageKeys를 센다. 스토리지 설정이 없으면 서버가 URL을
+              // 빈 배열로 내려보내므로(repo.rs) 키가 장수의 유일하게 믿을 수 있는 출처다.
+              <View className="absolute -right-1 -top-1 h-6 min-w-6 items-center justify-center rounded-full bg-black/70 px-1">
+                <Text className="text-xs font-bold text-white">{memory.imageKeys.length}</Text>
+              </View>
+            ) : null}
+          </View>
         ) : null}
 
         <View className="flex-1">
