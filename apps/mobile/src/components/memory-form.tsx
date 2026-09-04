@@ -5,6 +5,7 @@ import { View } from 'react-native';
 import { z } from 'zod';
 
 import { Button } from '@/components/button';
+import { DateField } from '@/components/date-field';
 import { ErrorText } from '@/components/error-text';
 import { FormField } from '@/components/form-field';
 import { ImageStrip } from '@/components/image-strip';
@@ -77,13 +78,7 @@ export function MemoryForm({
   return (
     <View className="gap-4">
       <FormField control={control} name="title" label="제목" placeholder="예: 첫 데이트" />
-      <FormField
-        control={control}
-        name="visitedAt"
-        label="날짜"
-        placeholder="2024-05-01"
-        keyboardType="numbers-and-punctuation"
-      />
+      <DateField control={control} name="visitedAt" label="날짜" />
       <FormField control={control} name="placeName" label="장소 (선택)" placeholder="예: 성수동" />
       <LocationField coordinate={coordinate} onChange={setCoordinate} />
       <ImageStrip images={images} onChange={setImages} />
