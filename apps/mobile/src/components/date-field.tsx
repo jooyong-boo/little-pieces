@@ -23,13 +23,20 @@ type DateFieldProps<T extends FieldValues> = {
   control: Control<T>;
   name: FieldPath<T>;
   label?: string;
+  /** 선택 필드인지. 비우면 빈 문자열이 되고, 저장할 때 호출부가 null로 바꾼다. */
+  clearable?: boolean;
 };
 
 /**
  * FormField와 같은 시그니처를 갖는 날짜 필드. 손으로 'YYYY-MM-DD'를 치는 대신 네이티브
  * 피커를 연다. 값은 여전히 문자열이라 zod 스키마와 서버 계약은 그대로다.
  */
-export function DateField<T extends FieldValues>({ control, name, label }: DateFieldProps<T>) {
+export function DateField<T extends FieldValues>({
+  control,
+  name,
+  label,
+  clearable = false,
+}: DateFieldProps<T>) {
   return (
     <Controller
       control={control}
@@ -37,7 +44,7 @@ export function DateField<T extends FieldValues>({ control, name, label }: DateF
       render={({ field: { onChange, value }, fieldState: { error } }) => (
         <View className="gap-1">
           {label ? <Text className="text-sm font-medium text-gray-600">{label}</Text> : null}
-          <DatePicker value={value} onChange={onChange} />
+          <DatePicker value={value} onChange={onChange} clearable={clearable} />
           {/*
             피커는 잘못된 값을 만들 수 없지만, 스키마가 어떤 이유로든 거부하면
             handleSubmit이 조용히 아무것도 안 하는 미스터리가 된다. 한 줄로 막는다.
@@ -53,9 +60,17 @@ export function DateField<T extends FieldValues>({ control, name, label }: DateF
  * Controller의 render는 컴포넌트가 아니라 콜백으로 불린다. 그 안에서 useState를 부르면
  * 훅 순서가 깨지므로 상태를 가진 부분을 별도 컴포넌트로 뺀다.
  */
-function DatePicker({ value, onChange }: { value: string; onChange: (next: string) => void }) {
+function DatePicker({
+  value,
+  onChange,
+  clearable,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  clearable: boolean;
+}) {
   const [isPicking, setIsPicking] = useState(false);
-  // 저장된 값이 깨져 있어도 피커는 열려야 한다. 오늘로 시작한다.
+  // 저장된 값이 비었거나 깨져 있어도 피커는 열려야 한다. 오늘로 시작한다.
   const [draft, setDraft] = useState(() => fromIsoDate(value, PICKER_UTC) ?? new Date());
 
   const open = () => {
@@ -74,14 +89,38 @@ function DatePicker({ value, onChange }: { value: string; onChange: (next: strin
         트리거는 인풋과 같은 한 줄 높이여야 한다. 피커를 폼에 상시 인라인으로 두면
         iOS는 달력이 통째로 펼쳐져(항상 inline이다) '저장' 버튼이 화면 밖으로 밀린다.
       */}
-      <Pressable
-        onPress={open}
-        accessibilityRole="button"
-        accessibilityLabel={`날짜 ${formatKoreanDate(value)}`}
-        className="rounded-lg border border-gray-300 px-4 py-3"
-      >
-        <Text className="text-gray-800">📅 {formatKoreanDate(value)}</Text>
-      </Pressable>
+      {value ? (
+        <View className="flex-row items-center gap-2">
+          <Pressable
+            onPress={open}
+            accessibilityRole="button"
+            accessibilityLabel={`날짜 ${formatKoreanDate(value)}`}
+            className="flex-1 rounded-lg border border-gray-300 px-4 py-3"
+          >
+            <Text className="text-gray-800">📅 {formatKoreanDate(value)}</Text>
+          </Pressable>
+          {clearable ? (
+            <Pressable
+              onPress={() => onChange('')}
+              accessibilityRole="button"
+              accessibilityLabel="날짜 제거"
+              className="rounded-lg border border-gray-300 px-3 py-2"
+            >
+              <Text className="text-sm text-gray-600">제거</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : (
+        // 선택 필드를 비워둔 상태. 점선으로 "아직 안 골랐다"를 드러낸다.
+        <Pressable
+          onPress={open}
+          accessibilityRole="button"
+          accessibilityLabel="날짜 추가"
+          className="items-center rounded-lg border border-dashed border-gray-300 py-3"
+        >
+          <Text className="text-gray-500">날짜 고르기</Text>
+        </Pressable>
+      )}
 
       {isPicking &&
         (Platform.OS === 'android' ? (

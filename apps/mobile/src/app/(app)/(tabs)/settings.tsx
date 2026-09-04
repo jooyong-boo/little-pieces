@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { z } from 'zod';
 
 import { Button } from '@/components/button';
+import { DateField } from '@/components/date-field';
 import { ErrorText } from '@/components/error-text';
 import { FormField } from '@/components/form-field';
 import { useCouple, useLeaveCouple, useUpdateCouple } from '@/hooks/use-couple';
@@ -129,13 +130,7 @@ function CoupleInfoForm({ couple }: { couple: Couple }) {
     <View className="gap-4 rounded-xl border border-gray-200 p-4">
       <Text className="text-sm font-semibold text-gray-600">공간 정보</Text>
       <FormField control={control} name="name" label="이름" />
-      <FormField
-        control={control}
-        name="anniversaryDate"
-        label="처음 만난 날"
-        placeholder="2024-05-01"
-        keyboardType="numbers-and-punctuation"
-      />
+      <DateField control={control} name="anniversaryDate" label="처음 만난 날" clearable />
       <ErrorText error={mutation.error} />
       <Button title="저장" isLoading={mutation.isPending} onPress={handleSubmit(onSubmit)} />
     </View>

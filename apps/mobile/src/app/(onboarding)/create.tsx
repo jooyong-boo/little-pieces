@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { Button } from '@/components/button';
 import { FormScreen } from '@/components/form-screen';
+import { DateField } from '@/components/date-field';
 import { ErrorText } from '@/components/error-text';
 import { FormField } from '@/components/form-field';
 import { useCreateCouple } from '@/hooks/use-couple';
@@ -42,13 +43,7 @@ export default function CreateCoupleScreen() {
       <Text className="mb-2 text-2xl font-bold">공간 만들기</Text>
 
       <FormField control={control} name="name" label="이름" placeholder="예: 우리 둘" />
-      <FormField
-        control={control}
-        name="anniversaryDate"
-        label="처음 만난 날 (선택)"
-        placeholder="2024-05-01"
-        keyboardType="numbers-and-punctuation"
-      />
+      <DateField control={control} name="anniversaryDate" label="처음 만난 날 (선택)" clearable />
 
       <ErrorText error={mutation.error} />
 
