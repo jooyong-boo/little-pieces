@@ -135,32 +135,56 @@ Class B 2회가 실제로 잡힌 것까지 확인했다.
 > 사진 한 장이 HEIC 원본 2.7MB이므로 **10GB ≈ 3,700장**이다. "배포 후에 볼 것"의
 > 서버측 리사이즈가 결국 여기서 값을 한다.
 
-### Phase 3 — API 호스팅: 클라우드 상시 가동 **(결정됨, 미착수)** ← 남은 것
+### Phase 3 — API 호스팅: Fly.io ✅ **완료**
 
-Neon과 R2가 원격이 되면 API는 **상태 없는 프로세스 하나**다. 어디서 돌든 데이터는 안전하고
-나중에 옮기는 건 바이너리를 옮기는 일이라, 이 선택은 되돌리기 싸다.
+**주소: `https://little-pieces.fly.dev`** — 앱 `little-pieces` / 리전 `sin`(싱가포르, Neon 옆) /
+`shared-cpu-1x` 256MB / 머신 **1개**.
 
-**노트북 + Cloudflare Tunnel(0원)은 탈락했다.** 같은 Wi-Fi 제약은 없애지만 "맥이 깨어 있어야
-한다"를 그대로 남긴다 — 이 문서가 배포를 1순위로 놓은 근거("맥을 끄면 앱이 죽는다")를
-해결하지 못한다.
+노트북 + Cloudflare Tunnel(0원)은 탈락시켰다. 같은 Wi-Fi 제약은 없애지만 "맥이 깨어 있어야
+한다"를 그대로 남겨, 이 문서가 배포를 1순위로 놓은 근거를 해결하지 못한다.
 
-**호스트 고르는 규칙: scale-to-zero / 자동 슬립이 있으면 탈락.** 스케줄러가 in-process
-`tokio::time::sleep` 루프라(`anniversary.rs:110`에서 확인) 머신이 자면 09:00 알림이 죽는다.
-취향이 아니라 제약이다. 무료 티어는 대부분 이것으로 탈락한다.
-후보는 **Fly.io**로 본다 — Docker 네이티브, 도쿄 리전, 자동 정지 비활성화를 기대하고 고른
-것이다. **이 세 가지도, 요금(월 2~3달러 수준 예상)도, 설정 키 이름도 전부 미검증이다.
-가입 시 현재 공식 문서로 확인하고, 자동 정지를 못 끄면 후보에서 탈락시킨다.**
+Fly.io에 대해 미검증으로 적어뒀던 것들을 공식 문서로 확인했다: 싱가포르 리전 `sin` 존재
+(도쿄 `nrt`도 있으나 Neon이 싱가포르다), 자동 정지를 끌 수 있음, `shared-cpu-1x` 256MB
+상시 가동 **월 $2.02**. egress는 Asia Pacific $0.04/GB지만 **사진은 폰↔R2 직통(presigned URL)이라
+Fly를 지나지 않는다** — JSON만 오가서 사실상 0이다.
 
-밟을 것:
+#### 이 앱에서 조용히 고장 나는 두 가지 (둘 다 `fly.toml`에서 막았다)
 
-- **Dockerfile** — `SQLX_OFFLINE=true`, 그리고 **`COPY migrations`를 `cargo build`보다 먼저.**
-  `sqlx::migrate!()`가 컴파일 시점에 마이그레이션을 바이너리에 임베드한다.
-- **자동 정지 / scale-to-zero를 끈다.** 위의 이유.
-- ~~**CI에 `cargo sqlx prepare --check`를 추가한다.**~~ ✅ **완료** — `.github/workflows/ci.yml`의
-  `api` 잡, `sqlx migrate run` 직후. 같이 `cargo install sqlx-cli`의 버전을 `^0.9`로 고정했다
-  (미고정이면 CLI가 흘렀을 때 코드가 멀쩡해도 이 스텝이 깨진다).
-- **`JWT_SECRET`을 새로 발급한다.** `api-client.ts:58`이 401에 자동 로그아웃이라
-  둘 다 재로그인 한 번으로 끝난다.
+**1. `fly launch`의 기본값이 scale-to-zero다** (`auto_stop_machines = "stop"`,
+`min_machines_running = 0`). 그래서 `fly launch`를 쓰지 않고 `fly.toml`을 손으로 썼다.
+
+**2. `min_machines_running = 1`로 두면 Fly가 HA용 머신을 하나 더 띄운다.** 실제로 첫 배포에서
+머신이 2개 생겼다. `anniversary.rs`의 스케줄러는 **인스턴스마다** 도는 in-process 루프라
+09:00 알림이 **두 번** 간다 — "발송 시각 계산이 곧 중복 방지"는 한 인스턴스의 재시작만 막지
+인스턴스 두 개는 못 막는다. 비용도 두 배다. autostop을 껐으므로 이 값은 어차피 무의미해서
+`0`으로 두는 것이 맞다.
+
+#### Dockerfile에서 확인하고 넣은 것
+
+- **빌드 컨텍스트는 저장소 루트다.** 워크스페이스 `Cargo.toml`/`Cargo.lock`이 루트에 있고
+  `apps/api/.sqlx`도 함께 들어가야 한다.
+- **`SQLX_OFFLINE=true`** — Phase 0의 캐시 덕에 컴파일 시점에 Neon을 보지 않는다.
+- **런타임에 `ca-certificates`.** `Cargo.lock`에 `rustls-native-certs`가 있어 **시스템 CA 저장소를
+  읽는다.** 없으면 Neon(`sslmode=verify-full`)과 Expo 푸시가 **컨테이너 안에서만** 깨진다 —
+  맥에는 자체 저장소가 있어 로컬에서는 재현되지 않는 종류다.
+- 비루트(uid 10001) 실행. 이미지 172MB.
+
+**`.dockerignore`는 속도가 아니라 비밀 때문에 넣었다.** docker는 `.gitignore`를 보지 않으므로
+`apps/api/.env`(Neon 비밀번호 + R2 시크릿)가 그대로 이미지에 구워지고, `main.rs:20`의
+`dotenvy::dotenv()`가 그걸 읽어 **Fly 시크릿을 덮어쓴다.** `apps/api/.sqlx`와 `migrations`는
+제외하지 않는다 — 둘 다 없으면 빌드가 깨진다.
+
+**`RUST_LOG = "info"`를 `[env]`에 넣었다.** `main.rs:22`가 `EnvFilter::from_default_env()`라
+이게 없으면 ERROR만 통과해 **앱 로그가 한 줄도 안 남는다.** 실제로 첫 배포 후 Fly 인프라
+로그만 있고 "listening on"조차 없었다. 09:00 잡이 살아 있다는 증거가 이 로그뿐이다.
+
+**시크릿 7개는 `fly secrets import`로 넣었다**(`DATABASE_URL`, `JWT_SECRET`, `S3_*` 5개).
+`JWT_SECRET`은 새로 발급했다 — 로컬 `.env` 값을 프로덕션에 재사용하지 않는다.
+`api-client.ts:58`이 401에 자동 로그아웃이라 기존 세션은 재로그인 한 번으로 끝난다.
+
+**검증:** `/health` 200, `http://` → `https://` 301 리다이렉트,
+`API_URL=https://little-pieces.fly.dev ./apps/api/scripts/e2e.sh` 전체 통과,
+로그에서 스케줄러가 **정확히 한 인스턴스**에서 `next=2026-09-05 09:00:00 +09:00`로 대기 중임을 확인.
 
 ### Phase 4 — 앱을 새 주소로
 

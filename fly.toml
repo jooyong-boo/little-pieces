@@ -4,6 +4,11 @@
 app = "little-pieces"
 primary_region = "sin" # Neon이 AWS ap-southeast-1(싱가포르)이다. 요청마다 API↔DB가 여러 번 왕복한다.
 
+[env]
+# main.rs:22가 EnvFilter::from_default_env()라 RUST_LOG이 없으면 ERROR만 통과한다.
+# 즉 이게 없으면 앱 로그가 한 줄도 안 남아 09:00 잡이 죽어도 알 수가 없다.
+RUST_LOG = "info"
+
 [http_service]
 internal_port = 3000 # config.rs:38의 PORT 기본값. main.rs:58이 0.0.0.0에 바인딩한다.
 force_https = true   # Android 릴리스가 평문 HTTP를 차단한다(ALLOW_CLEARTEXT는 주지 않는다).
@@ -13,7 +18,13 @@ force_https = true   # Android 릴리스가 평문 HTTP를 차단한다(ALLOW_CL
 # 취향이 아니라 제약이므로 자동 정지를 끈다.
 auto_stop_machines = "off"
 auto_start_machines = false
-min_machines_running = 1
+
+# 0이어야 한다. autostop을 껐으므로 이 값 자체는 무의미하지만, 1로 두면 Fly가 HA용으로
+# 머신을 하나 더 띄운다("Creating a second machine for high availability"). 그러면
+# anniversary.rs의 스케줄러가 인스턴스마다 돌아 09:00 알림이 두 번 간다 — 발송 시각
+# 계산으로 하는 중복 방지는 한 인스턴스의 재시작만 막지 인스턴스 두 개는 못 막는다.
+# 비용도 두 배다. 둘이 쓰는 앱에 HA는 필요 없다.
+min_machines_running = 0
 
 [[http_service.checks]]
 method = "GET"
