@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT couple_id FROM couple_members WHERE user_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "couple_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "couple_members",
+            "name": "couple_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "67683f8b6b7148b8335dfec498f62c442074a404a08bb4a001f2d361bd9a227a"
+}

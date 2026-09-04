@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE memories SET title = $3, description = $4, place_name = $5, latitude = $6, longitude = $7, image_keys = $8, visited_at = $9 WHERE id = $1 AND couple_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Float8",
+        "Float8",
+        "TextArray",
+        "Date"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "32be2b806b9e43f868a1b7e976749946bb80935359774f963c3e87beb1e38a07"
+}

@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO memories (id, couple_id, author_user_id, title, description, place_name, latitude, longitude, image_keys, visited_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Float8",
+        "Float8",
+        "TextArray",
+        "Date"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f977f7147bdf8ec830c72440737153ef4f33f6970e0a7abef3863e78de846847"
+}

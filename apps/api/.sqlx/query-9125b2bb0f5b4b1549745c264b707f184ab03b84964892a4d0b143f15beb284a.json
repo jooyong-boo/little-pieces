@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.id, c.name, c.anniversary_date, c.invite_code, c.created_at\n           FROM couples c\n           JOIN couple_members m ON m.couple_id = c.id\n           WHERE m.user_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "couples",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "couples",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "anniversary_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "couples",
+            "name": "anniversary_date"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "invite_code",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "couples",
+            "name": "invite_code"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "couples",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "9125b2bb0f5b4b1549745c264b707f184ab03b84964892a4d0b143f15beb284a"
+}

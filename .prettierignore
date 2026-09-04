@@ -6,3 +6,7 @@ ios
 pnpm-lock.yaml
 coverage
 assets/
+
+# sqlx가 생성하는 쿼리 캐시. 손으로 읽는 파일이 아니고,
+# 재생성할 때마다 24개가 통째로 재포맷돼 diff를 덮는다.
+apps/api/.sqlx

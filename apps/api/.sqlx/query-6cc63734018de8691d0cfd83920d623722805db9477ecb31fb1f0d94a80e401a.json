@@ -1,0 +1,148 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.id AS \"id!\", m.author_user_id, u.nickname AS \"author_nickname?\",\n                  m.title AS \"title!\", m.description, m.place_name,\n                  m.latitude, m.longitude, m.image_keys AS \"image_keys!\",\n                  m.visited_at AS \"visited_at!\", m.created_at AS \"created_at!\"\n           FROM memories m\n           LEFT JOIN users u ON u.id = m.author_user_id\n           WHERE m.couple_id = $1\n           ORDER BY m.visited_at DESC, m.created_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "memories",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "author_user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "memories",
+            "name": "author_user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "author_nickname?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "nickname"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "title!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "memories",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "description",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "memories",
+            "name": "description"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "place_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "memories",
+            "name": "place_name"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "latitude",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "memories",
+            "name": "latitude"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "longitude",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "memories",
+            "name": "longitude"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "image_keys!",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "memories",
+            "name": "image_keys"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "visited_at!",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "memories",
+            "name": "visited_at"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "created_at!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "memories",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "6cc63734018de8691d0cfd83920d623722805db9477ecb31fb1f0d94a80e401a"
+}

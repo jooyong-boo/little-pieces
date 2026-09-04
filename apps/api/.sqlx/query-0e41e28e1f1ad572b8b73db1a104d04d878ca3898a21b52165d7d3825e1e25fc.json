@@ -1,0 +1,66 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id AS \"id!\", couple_id AS \"couple_id!\", title AS \"title!\",\n                  visited_at AS \"visited_at!\"\n           FROM memories\n           -- EXTRACT는 NUMERIC을 돌려준다. int로 캐스팅해야 파라미터 타입이 맞는다.\n           WHERE EXTRACT(MONTH FROM visited_at)::int = $1\n             AND EXTRACT(DAY   FROM visited_at)::int = $2\n             AND EXTRACT(YEAR  FROM visited_at)::int < $3\n           ORDER BY visited_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "memories",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "couple_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "memories",
+            "name": "couple_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "title!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "memories",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "visited_at!",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "memories",
+            "name": "visited_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "0e41e28e1f1ad572b8b73db1a104d04d878ca3898a21b52165d7d3825e1e25fc"
+}
