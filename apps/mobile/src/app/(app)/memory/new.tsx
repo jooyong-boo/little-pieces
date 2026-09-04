@@ -1,13 +1,16 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { ScrollView, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
 import { MemoryForm } from '@/components/memory-form';
 import { useCreateMemory } from '@/hooks/use-memories';
+import { parseCoordinate } from '@/lib/map';
 
 export default function NewMemoryScreen() {
   const mutation = useCreateMemory();
+  // 지도를 길게 누르면 그 좌표를 달고 이 화면이 열린다. 그 외 경로에서는 비어 있다.
+  const { latitude, longitude } = useLocalSearchParams();
 
   return (
     <SafeAreaView className="flex-1 bg-white">
@@ -23,6 +26,7 @@ export default function NewMemoryScreen() {
           submitLabel="저장"
           isPending={mutation.isPending}
           error={mutation.error}
+          initialCoordinate={parseCoordinate(latitude, longitude)}
           onSubmit={(input) => mutation.mutate(input, { onSuccess: () => router.back() })}
         />
 

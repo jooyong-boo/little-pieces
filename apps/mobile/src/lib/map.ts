@@ -13,6 +13,27 @@ export const DEFAULT_REGION = {
   longitudeDelta: 0.05,
 };
 
+/**
+ * 라우트 파라미터로 넘어온 좌표를 읽는다.
+ *
+ * `unknown`으로 받는 이유: app.json이 scheme("littlepieces")을 등록하므로
+ * `littlepieces://memory/new?latitude=foo` 같은 링크를 앱 밖에서도 열 수 있다.
+ * `useLocalSearchParams<{ latitude?: string }>`는 캐스트일 뿐 검증이 아니고,
+ * 같은 키를 두 번 주면(`?latitude=1&latitude=2`) 문자열이 아니라 배열이 온다.
+ *
+ * 위치는 선택 항목이라 이상하면 `null`을 준다 — 폼은 열리고 위치 칸만 빈다.
+ */
+export function parseCoordinate(latitude: unknown, longitude: unknown): Coordinate | null {
+  if (typeof latitude !== 'string' || typeof longitude !== 'string') return null;
+  // Number('')와 Number(' ')는 0이다. 빈 값을 그냥 두면 기니만 앞바다(0, 0)에 핀이 박힌다.
+  if (latitude.trim() === '' || longitude.trim() === '') return null;
+
+  const parsed = { latitude: Number(latitude), longitude: Number(longitude) };
+  if (!Number.isFinite(parsed.latitude) || !Number.isFinite(parsed.longitude)) return null;
+  if (Math.abs(parsed.latitude) > 90 || Math.abs(parsed.longitude) > 180) return null;
+  return parsed;
+}
+
 function hasCoordinate(memory: Memory): memory is LocatedMemory {
   return memory.latitude !== null && memory.longitude !== null;
 }

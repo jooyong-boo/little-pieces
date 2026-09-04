@@ -1,5 +1,11 @@
 import type { Memory } from '../memory-api';
-import { DEFAULT_REGION, locatedMemories, regionForCoordinates, toCoordinates } from '../map';
+import {
+  DEFAULT_REGION,
+  locatedMemories,
+  parseCoordinate,
+  regionForCoordinates,
+  toCoordinates,
+} from '../map';
 
 const memory = (
   id: string,
@@ -100,4 +106,40 @@ test('keeps a usable zoom for a single pin', () => {
 
   expect(region.latitudeDelta).toBeGreaterThan(0);
   expect(region.longitudeDelta).toBeGreaterThan(0);
+});
+
+// 라우트 파라미터는 문자열이고, scheme으로 앱 밖에서도 열 수 있어 무엇이든 올 수 있다.
+
+test('reads a coordinate from route params', () => {
+  expect(parseCoordinate('37.5665', '126.978')).toEqual({
+    latitude: 37.5665,
+    longitude: 126.978,
+  });
+  expect(parseCoordinate('-33.8688', '-151.2093')).toEqual({
+    latitude: -33.8688,
+    longitude: -151.2093,
+  });
+});
+
+test('rejects params that are missing or not strings', () => {
+  expect(parseCoordinate(undefined, undefined)).toBeNull();
+  expect(parseCoordinate('37.5665', undefined)).toBeNull();
+  // ?latitude=1&latitude=2 는 배열로 온다.
+  expect(parseCoordinate(['1', '2'], '126.978')).toBeNull();
+});
+
+test('rejects blank params', () => {
+  // Number('')는 0이라 typeof 가드만으로는 (0, 0)이 통과해버린다.
+  expect(parseCoordinate('', '')).toBeNull();
+  expect(parseCoordinate(' ', '126.978')).toBeNull();
+});
+
+test('rejects params that are not numbers', () => {
+  expect(parseCoordinate('abc', '126.978')).toBeNull();
+  expect(parseCoordinate('37.5665', 'NaN')).toBeNull();
+});
+
+test('rejects coordinates outside the globe', () => {
+  expect(parseCoordinate('91', '126.978')).toBeNull();
+  expect(parseCoordinate('37.5665', '181')).toBeNull();
 });
