@@ -1,0 +1,16 @@
+# 빌드 컨텍스트는 저장소 루트다. docker는 .gitignore를 보지 않으므로 여기서 다시 막는다.
+
+# 비밀. apps/api/.env에는 Neon 비밀번호와 R2 시크릿이 들어 있고,
+# main.rs:20의 dotenvy::dotenv()가 이미지 안에서 그걸 읽어 Fly 시크릿을 덮어쓴다.
+**/.env
+**/.env.*
+
+# 무겁고 빌드에 필요 없는 것
+target/
+node_modules/
+**/node_modules/
+apps/mobile/
+.git/
+
+# apps/api/.sqlx 와 apps/api/migrations 는 절대 제외하지 않는다 —
+# 전자가 없으면 SQLX_OFFLINE 빌드가 깨지고, 후자가 없으면 sqlx::migrate!()가 컴파일에 실패한다.

@@ -1,0 +1,27 @@
+# 손으로 썼다. `fly launch`는 auto_stop_machines = "stop" / min_machines_running = 0을
+# 기본으로 써넣는데, 그게 이 앱에서는 조용한 고장이다(아래 참고).
+
+app = "little-pieces"
+primary_region = "sin" # Neon이 AWS ap-southeast-1(싱가포르)이다. 요청마다 API↔DB가 여러 번 왕복한다.
+
+[http_service]
+internal_port = 3000 # config.rs:38의 PORT 기본값. main.rs:58이 0.0.0.0에 바인딩한다.
+force_https = true   # Android 릴리스가 평문 HTTP를 차단한다(ALLOW_CLEARTEXT는 주지 않는다).
+
+# 여기가 이 파일의 핵심이다. anniversary.rs:110의 스케줄러가 in-process tokio::time::sleep
+# 루프라, 머신이 자면 "n년 전 오늘" 09:00 알림이 그냥 안 온다. HTTP 요청이 깨우지도 못한다.
+# 취향이 아니라 제약이므로 자동 정지를 끈다.
+auto_stop_machines = "off"
+auto_start_machines = false
+min_machines_running = 1
+
+[[http_service.checks]]
+method = "GET"
+path = "/health"
+interval = "30s"
+timeout = "5s"
+grace_period = "10s" # 기동 시 마이그레이션이 돌아간다.
+
+[[vm]]
+size = "shared-cpu-1x"
+memory = "256mb" # 상시 가동 기준 월 $2 수준. Rust 바이너리라 넉넉하다.
