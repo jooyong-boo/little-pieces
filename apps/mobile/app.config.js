@@ -13,25 +13,41 @@ const path = require('node:path');
 const googleServicesFile = './google-services.json';
 const hasFirebase = fs.existsSync(path.join(__dirname, googleServicesFile));
 
-module.exports = ({ config }) => ({
-  ...config,
-  android: {
-    ...config.android,
-    ...(hasFirebase ? { googleServicesFile } : {}),
-  },
-  plugins: [
-    ...(config.plugins ?? []),
-    ...(allowCleartext
-      ? [['expo-build-properties', { android: { usesCleartextTraffic: true } }]]
-      : []),
-    [
-      'react-native-maps',
-      {
-        // 키가 없으면 undefined가 들어가고 플러그인이 Android 매니페스트 항목을
-        // 건너뛴다 — 그 상태로 빌드하면 Android 지도가 회색으로 뜬다.
-        // iOS는 키를 주지 않는다. 그래야 Google Maps Pod이 안 붙고 Apple Maps를 쓴다.
-        androidGoogleMapsApiKey: process.env.GOOGLE_MAPS_ANDROID_KEY,
-      },
+// CocoaPods의 Pods-*-frameworks.sh는 EXPANDED_CODE_SIGN_IDENTITY가 비어 있으면
+// 임베드 프레임워크 서명을 통째로 건너뛴다(조용히). Expo 템플릿 기본값인
+// "iPhone Developer"는 요즘 인증서 이름("Apple Development: ...")과 맞지 않아
+// 그 변수가 빈 값이 된다. 그러면 빌드는 0 error로 성공하고 앱 본체도 서명되지만,
+// 기기 설치가 ApplicationVerificationFailed로 죽는다:
+//   hermesvm.framework : 0xe800801c (No code signature found.)
+// ios/는 gitignore(CNG)라 project.pbxproj를 직접 고쳐도 prebuild가 되돌린다.
+const { withXcodeProject } = require('@expo/config-plugins');
+
+const withModernCodeSignIdentity = (config) =>
+  withXcodeProject(config, (cfg) => {
+    cfg.modResults.updateBuildProperty('CODE_SIGN_IDENTITY[sdk=iphoneos*]', '"Apple Development"');
+    return cfg;
+  });
+
+module.exports = ({ config }) =>
+  withModernCodeSignIdentity({
+    ...config,
+    android: {
+      ...config.android,
+      ...(hasFirebase ? { googleServicesFile } : {}),
+    },
+    plugins: [
+      ...(config.plugins ?? []),
+      ...(allowCleartext
+        ? [['expo-build-properties', { android: { usesCleartextTraffic: true } }]]
+        : []),
+      [
+        'react-native-maps',
+        {
+          // 키가 없으면 undefined가 들어가고 플러그인이 Android 매니페스트 항목을
+          // 건너뛴다 — 그 상태로 빌드하면 Android 지도가 회색으로 뜬다.
+          // iOS는 키를 주지 않는다. 그래야 Google Maps Pod이 안 붙고 Apple Maps를 쓴다.
+          androidGoogleMapsApiKey: process.env.GOOGLE_MAPS_ANDROID_KEY,
+        },
+      ],
     ],
-  ],
-});
+  });

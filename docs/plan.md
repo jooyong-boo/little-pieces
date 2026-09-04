@@ -186,13 +186,72 @@ Fly를 지나지 않는다** — JSON만 오가서 사실상 0이다.
 `API_URL=https://little-pieces.fly.dev ./apps/api/scripts/e2e.sh` 전체 통과,
 로그에서 스케줄러가 **정확히 한 인스턴스**에서 `next=2026-09-05 09:00:00 +09:00`로 대기 중임을 확인.
 
-### Phase 4 — 앱을 새 주소로
+### Phase 4 — 앱을 새 주소로 — iOS ✅ / Android 남음
 
-`apps/mobile/.env`의 `EXPO_PUBLIC_API_URL`을 HTTPS 주소로 바꾸고 릴리스 빌드를 폰에 설치한다.
-`ALLOW_CLEARTEXT`는 **주지 않는다** — HTTPS다.
+`apps/mobile/.env`의 `EXPO_PUBLIC_API_URL`을 **`https://little-pieces.fly.dev`**로 바꿨다.
+`ALLOW_CLEARTEXT`는 주지 않는다 — HTTPS다.
 
-> `EXPO_PUBLIC_API_URL`은 **빌드 시점에 박힌다.** Phase 3에서 주소가 확정된 다음에 밟아야 한다.
-> `app.config.js`를 건드렸다면 `expo prebuild`를 따로 돌린다(아래 "환경" 함정).
+**`expo prebuild`는 다시 돌릴 필요가 없다.** `EXPO_PUBLIC_API_URL`은 JS에서만 쓰이고
+(`src/lib/env.ts` → `api-client.ts`) `app.config.js`를 타지 않는다. prebuild가 필요한 건
+`app.config.js`를 건드렸을 때다(아래 "환경" 함정).
+
+**한글 경로 `pod install` 함정은 현재 작업 경로에 해당하지 않는다** — 전부 ASCII다.
+
+#### iOS 시뮬레이터 검증 (완료)
+
+Maestro `signup-to-memory` 전체 통과 — 회원가입 → 커플 생성 → 추억 등록 → 수정 → 설정.
+로컬 API가 꺼진 상태(`:3000` 아무것도 안 들음, docker 내려감)에서 통과했고,
+Neon에 실제로 남은 것까지 확인했다:
+
+```
+ios-1788516629@test.com | 2026-09-04 10:10:55+00
+첫 산책 | 한강          | 2026-09-04 10:11:11+00
+```
+
+> Maestro 플로우는 `-e EMAIL=...`이 **필수다.** 안 주면 이메일 칸에 문자열 `undefined`가
+> 들어가 클라이언트 검증에서 막히고, 서버 문제처럼 보인다. 플로우 첫머리 주석에 실행법이 있다.
+
+#### iOS 실기기 서명 (사람이 해야 하는 부분)
+
+**Xcode에 Apple ID를 로그인하는 것만으로는 인증서가 생기지 않는다.** 프로젝트에서
+타겟 → Signing & Capabilities → Automatically manage signing → Team을 고르는 순간 생성된다.
+그 전에는 `expo run:ios --device`가 `No code signing certificates are available to use.`로 죽는다.
+
+**엔타이틀먼트가 비어 있어(`aps-environment` 없음) 무료 Apple ID로도 설치된다.**
+유료 Developer Program은 푸시에만 필요하다. 무료 프로파일은 **7일마다 재설치**해야 한다
+(이번 프로파일 만료: 2026-09-11).
+
+#### 실기기 설치가 죽던 진짜 이유 — 서명이 아니라 **프레임워크 서명**
+
+서명·프로파일이 다 맞는데도 설치가 `ApplicationVerificationFailed`로 죽었다.
+`xcrun devicectl device install app`으로 직접 설치하니 진짜 메시지가 나왔다:
+
+```
+Failed to verify code signature of .../Frameworks/hermesvm.framework
+0xe800801c (No code signature found.)
+```
+
+**임베드된 프레임워크 14개가 전부 미서명이었다.** 앱 본체만 서명돼 있었다.
+
+원인은 한 줄이다:
+
+```
+CODE_SIGN_IDENTITY = "iPhone Developer"     ← Expo 템플릿 기본값(레거시 이름)
+실제 인증서         = "Apple Development: ..."  ← 현재 이름
+```
+
+CocoaPods의 `Pods-LittlePieces-frameworks.sh`가 `code_sign_if_enabled()`에서
+`-n "${EXPANDED_CODE_SIGN_IDENTITY:-}"`를 본다. 이름이 안 맞으면 이 변수가 **빈 값**이
+되어 서명을 **조용히 건너뛴다**. 빌드는 `0 error(s)`로 성공하고 앱 본체는 자동 서명이
+따로 처리하므로, **빌드 로그만 봐서는 아무 문제가 없어 보인다.**
+
+확인 방법: 빌드 로그에 `Code Signing ... with Identity`가 몇 건인지 센다.
+정상이면 프레임워크 수만큼, 고장이면 **0건**이다.
+
+**고친 곳은 `app.config.js`다.** `ios/`는 gitignore(CNG)라 `project.pbxproj`를 직접
+고쳐도 `expo prebuild`가 되돌린다. `withXcodeProject`로 `CODE_SIGN_IDENTITY[sdk=iphoneos*]`를
+`"Apple Development"`로 박는 config plugin을 넣었다. 적용 후 재빌드하니 수동 재서명 없이
+프레임워크 14개가 서명되고 폰에 설치됐다.
 
 ### Phase 5 — `upload.jks` 재발급
 
