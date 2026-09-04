@@ -45,6 +45,26 @@
 | `apps/mobile/src/lib/api-client.ts:58` | 401 → 자동 로그아웃 — `JWT_SECRET`을 갈아도 재로그인으로 끝난다         |
 | `apps/api/scripts/e2e.sh:8`            | `API_URL`로 대상 서버를 바꾼다 — 배포된 주소에 그대로 겨눌 수 있다      |
 
+### Phase 0 — `.sqlx` 오프라인 캐시 (가장 먼저)
+
+`query_as!`는 **컴파일 시점에** DB에 붙는다. `.sqlx/` 캐시를 커밋해두면 `SQLX_OFFLINE=true`로
+네트워크 없이 빌드된다. Phase 3의 Docker 빌드는 **이게 없으면 아예 불가능하고**, Phase 1
+이후의 로컬 빌드도 이게 없으면 매번 Neon을 보게 된다. 경로 선택과 무관하게 필요하다.
+
+**데이터가 있는 로컬 DB에서 뽑는 편이 낫다** — 아래 "코드에서 배운 것"의 NULL 추론 버그가
+"빈 DB에서만 컴파일되던 코드"였고, 채워진 DB가 더 엄격한 쪽이다. `AS "컬럼!"`으로 못 박아둔
+뒤라 지금은 어느 쪽에서 뽑아도 같아야 하지만, 확인 비용이 0이라 굳이 뒤집을 이유가 없다.
+Neon은 빈 DB로 시작하므로 Phase 1보다 먼저 밟는다.
+(**도커 볼륨에 데이터가 남아 있는지 먼저 본다** — 비어 있으면 이 이점은 없다.)
+
+```bash
+docker compose up -d               # 로컬 Postgres (현재 꺼져 있음)
+cd apps/api && cargo sqlx prepare  # sqlx-cli 0.9.0은 이미 설치돼 있다 (크레이트와 버전 일치 확인함)
+git add .sqlx && git commit   # cd가 유지된 상태다
+```
+
+캐시가 조용히 낡으면 CI가 아니라 **배포가** 깨진다. `--check`를 CI에 넣는 건 Phase 3에서 한다.
+
 ### Phase 1 — Neon
 
 **DB는 Neon으로 정했다.**
@@ -55,10 +75,10 @@
 
 `apps/api/.env`의 `DATABASE_URL`을 갈고 `pnpm api:dev` — 마이그레이션 4개가 알아서 적용된다.
 
-> `query_as!`는 **컴파일 시점에** `DATABASE_URL`이 가리키는 DB에 붙는다. Neon으로 갈면
-> `cargo build`가 Neon을 보게 되고 오프라인에서는 빌드가 막힌다. 빈 Neon DB에서
-> NULL 추론 문제(아래 "코드에서 배운 것")가 재현될 수 있다 — `AS "컬럼!"`으로 못 박아뒀으니
-> 통과해야 정상이고, 여기서 깨지면 원인은 그것이다.
+> Phase 0을 밟았다면 `SQLX_OFFLINE=true`로 빌드가 Neon을 보지 않는다. 건너뛰었다면
+> `cargo build`가 Neon에 붙어 오프라인 빌드가 막히고, 빈 Neon DB에서 NULL 추론 문제
+> (아래 "코드에서 배운 것")가 재현될 수 있다 — `AS "컬럼!"`으로 못 박아뒀으니 통과해야
+> 정상이고, 여기서 깨지면 원인은 그것이다.
 
 ### Phase 2 — R2
 
@@ -68,33 +88,31 @@
 
 검증은 `./apps/api/scripts/e2e.sh`가 사진 바이트 왕복까지 이미 한다.
 
-### Phase 3 — API 호스팅 ← **유일한 미결**
+### Phase 3 — API 호스팅: 클라우드 상시 가동 **(결정됨)**
 
-Neon과 R2가 원격이 되면 **API는 상태 없는 프로세스 하나**다. 어디서 돌든 데이터는 안전하고,
-나중에 옮기는 건 바이너리를 옮기는 일이다. 그래서 이 선택은 되돌리기 싸다.
+Neon과 R2가 원격이 되면 API는 **상태 없는 프로세스 하나**다. 어디서 돌든 데이터는 안전하고
+나중에 옮기는 건 바이너리를 옮기는 일이라, 이 선택은 되돌리기 싸다.
 
-**경로 A — 노트북 + Cloudflare Tunnel (0원)**
+**노트북 + Cloudflare Tunnel(0원)은 탈락했다.** 같은 Wi-Fi 제약은 없애지만 "맥이 깨어 있어야
+한다"를 그대로 남긴다 — 이 문서가 배포를 1순위로 놓은 근거("맥을 끄면 앱이 죽는다")를
+해결하지 못한다.
 
-`cloudflared`가 `localhost:3000`에 고정 HTTPS 주소를 붙인다. 아웃바운드 연결이라
-포트포워딩·고정 IP가 필요 없고 네트워크가 바뀌어도 견딘다.
-09:00 알림을 살리려면 맥을 깨운다: `sudo pmset repeat wakeorpoweron MTWRFSU 08:55:00`.
+**호스트 고르는 규칙: scale-to-zero / 자동 슬립이 있으면 탈락.** 스케줄러가 in-process
+`tokio::time::sleep` 루프라(`anniversary.rs:110`에서 확인) 머신이 자면 09:00 알림이 죽는다.
+취향이 아니라 제약이다. 무료 티어는 대부분 이것으로 탈락한다.
+후보는 **Fly.io**로 본다 — Docker 네이티브, 도쿄 리전, 자동 정지 비활성화를 기대하고 고른
+것이다. **이 세 가지도, 요금(월 2~3달러 수준 예상)도, 설정 키 이름도 전부 미검증이다.
+가입 시 현재 공식 문서로 확인하고, 자동 정지를 못 끄면 후보에서 탈락시킨다.**
 
-**받아들이는 한계: 맥이 자면 앱이 안 된다.** 이 경로는 Dockerfile도 `.sqlx` 캐시도 필요 없다.
+밟을 것:
 
-**경로 B — 클라우드 상시 가동 (월 2~3달러 수준, 가입 시 요금 확인)**
-
-경로 A에 없는 작업이 붙는다:
-
-- **`.sqlx` 오프라인 캐시가 지금 없다.** `query_as!`가 컴파일 시점 DB를 요구해서
-  **이게 없으면 Docker 빌드가 아예 불가능하다.** `cargo install sqlx-cli --version ^0.9`
-  (크레이트 버전과 맞춰야 한다) → `cd apps/api && cargo sqlx prepare` → `.sqlx/`를 커밋.
 - **Dockerfile** — `SQLX_OFFLINE=true`, 그리고 **`COPY migrations`를 `cargo build`보다 먼저.**
   `sqlx::migrate!()`가 컴파일 시점에 마이그레이션을 바이너리에 임베드한다.
+- **자동 정지 / scale-to-zero를 끈다.** 위의 이유.
 - **CI에 `cargo sqlx prepare --check`를 추가한다.** 없으면 캐시가 조용히 낡고
   CI가 아니라 **배포가** 깨진다.
-- **scale-to-zero / 자동 슬립을 끈다.** 스케줄러가 in-process `sleep`이라
-  (`anniversary.rs:110`) 머신이 자면 09:00 알림이 죽는다. 취향이 아니라 제약이다.
-- `JWT_SECRET`을 새로 발급한다.
+- **`JWT_SECRET`을 새로 발급한다.** `api-client.ts:58`이 401에 자동 로그아웃이라
+  둘 다 재로그인 한 번으로 끝난다.
 
 ### Phase 4 — 앱을 새 주소로
 
@@ -103,6 +121,12 @@ Neon과 R2가 원격이 되면 **API는 상태 없는 프로세스 하나**다. 
 
 > `EXPO_PUBLIC_API_URL`은 **빌드 시점에 박힌다.** Phase 3에서 주소가 확정된 다음에 밟아야 한다.
 > `app.config.js`를 건드렸다면 `expo prebuild`를 따로 돌린다(아래 "환경" 함정).
+
+### Phase 5 — `upload.jks` 재발급
+
+비밀번호가 개발 세션 기록에 남았다. **아직 아무것도 서명하지 않아 지금은 비용이 0이다** —
+스토어에 한 번 올리고 나면 서명 키는 영영 못 바꾼다. 재발급한 뒤 **레포 밖에 백업한다**
+(gitignore라 레포에 없고, 잃어버리면 스토어 업데이트를 올릴 수 없다).
 
 ### 앱 배포를 재개할 때 (지금은 보류)
 
@@ -156,7 +180,7 @@ API_URL=https://<주소> ./apps/api/scripts/e2e.sh   # 연동·격리·사진 �
   저장 후 바로 `router.back()`이라 닿기 어렵다. 폼을 `query.data.id`로 keying하면 해결.
 - 스케줄러: 서버가 09:00에 꺼져 있으면 그날은 건너뛴다. 2월 29일 추억은 평년에 울리지 않는다.
   **다만 앞의 절반은 더 이상 미룰 수 있는 항목이 아니다** — in-process `sleep`이라
-  호스팅이 자면 알림이 죽는다. Phase 3의 선택을 제약한다.
+  호스팅이 자면 알림이 죽는다. Phase 3에서 자동 슬립 없는 호스트를 고르는 것으로 해결한다.
 - Android 탭 아이콘 — iOS SF Symbol만 줘서 Android는 라벨만 나온다.
 
 ---
@@ -226,6 +250,6 @@ API_URL=https://<주소> ./apps/api/scripts/e2e.sh   # 연동·격리·사진 �
 
 ## 사용자가 챙길 것
 
-**`apps/mobile/credentials/upload.jks` 백업.** gitignore라 레포에 없다.
-**잃어버리면 스토어 업데이트를 올릴 수 없다.** 비밀번호가 개발 세션 기록에 남았으므로,
-실제 배포 전이라면 재생성하는 편이 낫다 — 아직 아무것도 서명하지 않아 비용이 0이다.
+**`apps/mobile/credentials/upload.jks`** — 재발급과 백업. Phase 5로 올렸다.
+
+**클라우드 호스팅 결제 수단과 Neon·R2·Fly.io 계정.** 코드로 대신할 수 없는 유일한 부분이다.
