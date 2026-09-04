@@ -5,6 +5,15 @@ export type Coordinate = { latitude: number; longitude: number };
 /** 좌표가 채워진 추억. 타입 가드로 좁혀서 `latitude!` 같은 단언을 쓰지 않는다. */
 export type LocatedMemory = Memory & Coordinate;
 
+/** "현재 위치" 버튼이 옮겨갈 배율. 동네가 보이는 정도. */
+export const USER_LOCATION_DELTA = { latitudeDelta: 0.01, longitudeDelta: 0.01 };
+
+/**
+ * 위치를 고르는 화면의 배율. 지도 탭보다 더 당겨져 있다 — 여기서는 둘러보는 게 아니라
+ * 한 지점을 정확히 찍는 게 목적이라, 건물이 구분될 정도로 보여야 손이 덜 간다.
+ */
+export const PICKER_DELTA = { latitudeDelta: 0.004, longitudeDelta: 0.004 };
+
 /** 좌표를 아예 안 찍은 커플에게 보여줄 시작점. */
 export const DEFAULT_REGION = {
   latitude: 37.5665,

@@ -9,7 +9,10 @@
     "userInterfaceStyle": "light",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.littlepieces.app"
+      "bundleIdentifier": "com.littlepieces.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "지금 어디쯤인지 지도에 보여주려면 위치 권한이 필요해요."
+      }
     },
     "android": {
       "package": "com.littlepieces.app",
@@ -19,7 +22,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
     },
     "web": {
       "output": "static",

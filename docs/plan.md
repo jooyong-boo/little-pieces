@@ -346,6 +346,16 @@ API_URL=https://<주소> ./apps/api/scripts/e2e.sh   # 연동·격리·사진 �
 - **실기기는 `localhost`로 맥에 못 닿는다.** `10.0.2.2`는 에뮬레이터 전용. 맥의 LAN IP를 쓴다.
 - **`app.config.js`를 바꾸면 `expo prebuild`를 따로 돌려야 한다.** `android/`가 이미 있으면
   `expo run:android`가 config를 다시 반영하지 않아 매니페스트에 조용히 안 들어간다.
+- **`expo prebuild`는 `DEVELOPMENT_TEAM`을 지운다.** `ios/`를 다시 만들기 때문이다.
+  `CODE_SIGN_IDENTITY`는 config plugin이 다시 박아주지만 팀은 아니다 — 매번 Xcode에서
+  타겟 → Signing & Capabilities → Team을 다시 골라야 실기기 빌드가 된다.
+  (팀 ID를 plugin에 하드코딩하면 다른 사람이 이 저장소를 빌드할 때 깨지므로 안 넣는다.)
+- **pbxproj에서 대괄호가 든 키는 따옴표로 감싸는 것이 문법이다.** `updateBuildProperty`에
+  `CODE_SIGN_IDENTITY[sdk=iphoneos*]`를 따옴표 없이 넘기면 두 가지가 한꺼번에 터진다:
+  기존 키를 교체하지 못해 **원본이 그대로 남고**, 생성된 파일이 파싱 불가능해져
+  **다음 `expo prebuild`가 통째로 죽는다**(`Expected "/*", "=", or [A-Za-z0-9_.] but "[" found`).
+  즉시 드러나지 않는다 — `ios/`를 손으로 고쳐둔 상태에서는 빌드가 멀쩡히 돌기 때문에,
+  config plugin은 **"mod이 등록된다"가 아니라 "prebuild가 통과한다"로 확인해야 한다.**
 - Expo/EAS 로그인은 **액세스 토큰**(`~/.expo-token`, `EXPO_TOKEN`)으로 한다. 비밀번호가 필요 없다.
 
 ### 계정·자격증명
