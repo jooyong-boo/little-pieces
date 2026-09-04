@@ -112,15 +112,30 @@ git add .sqlx && git commit   # cd가 유지된 상태다
 > (아래 "코드에서 배운 것")가 재현될 수 있다 — `AS "컬럼!"`으로 못 박아뒀으니 통과해야
 > 정상이고, 여기서 깨지면 원인은 그것이다.
 
-### Phase 2 — R2
+### Phase 2 — R2 ✅ **완료**
 
-버킷 `little-pieces`를 만들고 **비공개로 둔다** — `storage.rs:60`의 presigned GET으로만 읽는
-설계다. Object Read & Write 토큰을 발급해 `apps/api/.env`의 다섯 줄만 갈아끼운다
-(`.env.example`에 R2 기준 주석이 이미 있다). `S3_REGION=auto`는 그대로 둔다.
+버킷 `little-pieces` / Location **Asia Pacific**(자동 선택, Neon 싱가포르와 맞다) /
+Storage Class **Standard**(무료 한도가 Standard에만 적용된다) / **Public Access: Disabled** —
+`storage.rs:60`의 presigned GET으로만 읽는 설계 그대로다.
 
-검증은 `./apps/api/scripts/e2e.sh`가 사진 바이트 왕복까지 이미 한다.
+**토큰은 Account API token으로, 권한을 최소로 좁혔다:** `Object Read & Write` +
+버킷을 `little-pieces` 하나로 지정. Admin 권한은 버킷 생성·삭제까지 되므로 앱에 불필요하다.
+User token은 계정 상태에 묶여 비활성화될 수 있어 쓰지 않았다(Cloudflare가 프로덕션에
+Account token을 권장한다).
 
-### Phase 3 — API 호스팅: 클라우드 상시 가동 **(결정됨)**
+`apps/api/.env`의 `S3_*` 다섯 줄을 갈았다. `S3_REGION=auto`는 그대로.
+`S3_ENDPOINT`는 `https://<account_id>.r2.cloudflarestorage.com` 형태다.
+
+**검증:** `e2e.sh` 전체 통과(업로드한 바이트와 내려받은 바이트가 동일). MinIO가 로컬에
+같이 떠 있어 착각할 수 있으므로 R2 대시보드에서 `couples/` 프리픽스와 Class A 3회 /
+Class B 2회가 실제로 잡힌 것까지 확인했다.
+
+> **과금 형태를 알아둘 것.** R2는 "Add R2 subscription"으로 켜는 **자동갱신 사용량 과금**이다.
+> 무료 한도는 저장 10GB/월, Class A 100만, Class B 1,000만. 초과 시 저장은 GB당 $0.015/월.
+> 사진 한 장이 HEIC 원본 2.7MB이므로 **10GB ≈ 3,700장**이다. "배포 후에 볼 것"의
+> 서버측 리사이즈가 결국 여기서 값을 한다.
+
+### Phase 3 — API 호스팅: 클라우드 상시 가동 **(결정됨, 미착수)** ← 남은 것
 
 Neon과 R2가 원격이 되면 API는 **상태 없는 프로세스 하나**다. 어디서 돌든 데이터는 안전하고
 나중에 옮기는 건 바이너리를 옮기는 일이라, 이 선택은 되돌리기 싸다.
