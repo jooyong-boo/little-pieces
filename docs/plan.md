@@ -84,15 +84,28 @@ git add .sqlx && git commit   # cd가 유지된 상태다
 `.sqlx`는 `.prettierignore`에 넣었다 — lint-staged의 `*.{json,md,yml,yaml}` 규칙에 걸려
 재생성할 때마다 24개가 통째로 재포맷돼 diff를 덮었다.
 
-### Phase 1 — Neon
+### Phase 1 — Neon ✅ **완료**
 
-**DB는 Neon으로 정했다.**
+프로젝트 `little-pieces` / 브랜치 `production` / DB `little_pieces` / Postgres 17.
+**리전은 AWS Asia Pacific 1 (싱가포르)** — Neon에 도쿄·서울이 없고 아시아는 싱가포르와
+시드니뿐이다. 중요한 건 폰↔DB가 아니라 **API↔DB** 지연이므로(요청마다 여러 번 왕복한다)
+**Phase 3의 호스트도 싱가포르에 둔다.**
 
 **direct(unpooled) 엔드포인트**를 써야 한다. 풀러(PgBouncer transaction 모드)를 쓰면
 `query_as!`가 의존하는 prepared statement가 깨진다. `db.rs:5`가 `max_connections(5)`라
 풀러가 애초에 불필요하다.
 
-`apps/api/.env`의 `DATABASE_URL`을 갈고 `pnpm api:dev` — 마이그레이션 4개가 알아서 적용된다.
+`apps/api/.env`의 `DATABASE_URL`을 갈고 `pnpm api:dev` — 마이그레이션 4개가 알아서 적용됐다.
+검증은 `./apps/api/scripts/e2e.sh` 전체 통과(커플 연동·격리·사진 왕복까지).
+
+**연결 문자열에서 손댄 것 두 가지:**
+
+- Neon 콘솔의 **Connection pooling 토글을 끈다.** 켜져 있으면 호스트에 `-pooler`가 붙는다.
+- Neon이 주는 기본값은 `?sslmode=require&channel_binding=require`인데 **sqlx는
+  `channel_binding`을 모르고 무시한다**(기동 시 경고를 낸다). 걷어내고 `?sslmode=verify-full`
+  하나만 남겼다 — `require`는 TLS만 켜고 서버 인증서를 검증하지 않는다. 자격증명이 공개
+  인터넷을 지나므로 검증하는 편이 맞다. sqlx가 이 값을 실제로 파싱하는지는 오타를 넣어
+  확인했다(`unknown value "bogus-value" for ssl_mode`로 거부한다).
 
 > Phase 0을 밟았다면 `SQLX_OFFLINE=true`로 빌드가 Neon을 보지 않는다. 건너뛰었다면
 > `cargo build`가 Neon에 붙어 오프라인 빌드가 막히고, 빈 Neon DB에서 NULL 추론 문제
