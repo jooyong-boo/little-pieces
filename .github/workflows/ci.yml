@@ -59,9 +59,18 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - run: cargo install sqlx-cli --no-default-features --features postgres,rustls
+      # 버전을 고정한다. prepare --check가 생성된 JSON을 비교하므로 CLI가 흐르면
+      # 코드가 멀쩡해도 이 잡이 깨진다. apps/api/Cargo.toml의 sqlx와 맞춘다.
+      - run: cargo install sqlx-cli --version '^0.9' --no-default-features --features postgres,rustls
 
       - run: sqlx migrate run
+        working-directory: apps/api
+
+      # .sqlx 오프라인 캐시가 낡으면 CI가 아니라 배포가 깨진다(Docker 빌드는
+      # SQLX_OFFLINE=true라 캐시만 본다). 위 postgres 서비스는 갓 마이그레이션한
+      # 빈 DB이므로, .sqlx도 같은 조건에서 뽑아야 한다 — 데이터가 쌓인 DB에서
+      # 뽑으면 LEFT JOIN 컬럼의 nullable 추론이 갈려 여기서 실패한다.
+      - run: cargo sqlx prepare --check
         working-directory: apps/api
 
       - run: cargo fmt --check

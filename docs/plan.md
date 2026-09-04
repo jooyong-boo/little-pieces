@@ -45,25 +45,44 @@
 | `apps/mobile/src/lib/api-client.ts:58` | 401 → 자동 로그아웃 — `JWT_SECRET`을 갈아도 재로그인으로 끝난다         |
 | `apps/api/scripts/e2e.sh:8`            | `API_URL`로 대상 서버를 바꾼다 — 배포된 주소에 그대로 겨눌 수 있다      |
 
-### Phase 0 — `.sqlx` 오프라인 캐시 (가장 먼저)
+### Phase 0 — `.sqlx` 오프라인 캐시 ✅ **완료**
 
 `query_as!`는 **컴파일 시점에** DB에 붙는다. `.sqlx/` 캐시를 커밋해두면 `SQLX_OFFLINE=true`로
 네트워크 없이 빌드된다. Phase 3의 Docker 빌드는 **이게 없으면 아예 불가능하고**, Phase 1
 이후의 로컬 빌드도 이게 없으면 매번 Neon을 보게 된다. 경로 선택과 무관하게 필요하다.
 
-**데이터가 있는 로컬 DB에서 뽑는 편이 낫다** — 아래 "코드에서 배운 것"의 NULL 추론 버그가
-"빈 DB에서만 컴파일되던 코드"였고, 채워진 DB가 더 엄격한 쪽이다. `AS "컬럼!"`으로 못 박아둔
-뒤라 지금은 어느 쪽에서 뽑아도 같아야 하지만, 확인 비용이 0이라 굳이 뒤집을 이유가 없다.
-Neon은 빈 DB로 시작하므로 Phase 1보다 먼저 밟는다.
-(**도커 볼륨에 데이터가 남아 있는지 먼저 본다** — 비어 있으면 이 이점은 없다.)
+**반드시 갓 마이그레이션한 빈 DB에서 뽑는다.** 처음엔 "데이터가 있는 쪽이 더 엄격하다"고
+적었는데 **측정해보니 틀렸다.** 채워진 개발 DB에서 뽑으면 `cargo sqlx prepare --check`가
+CI에서 영영 실패한다 — CI의 postgres 서비스도, Neon도 빈 DB에서 시작하기 때문이다.
+
+갈리는 건 쿼리 하나(`memories` LEFT JOIN `users`)이고, 갈리는 컬럼은 **정확히 매크로로
+못 박은 것들뿐**이다:
+
+| 컬럼                                                     | 채워진 DB | 빈 DB    |
+| -------------------------------------------------------- | --------- | -------- |
+| `id!` `title!` `image_keys!` `visited_at!` `created_at!` | nullable  | not null |
+| `author_nickname?`                                       | not null  | nullable |
+| 못 박지 않은 나머지 5개                                  | **동일**  | **동일** |
+
+`!`/`?` override가 codegen을 지배하므로 **생성되는 Rust 타입은 어느 쪽이든 같다** —
+오프라인 빌드와 `cargo test` 38개로 확인했다. 차이는 JSON 파일뿐인데 `--check`는 파일을
+비교한다. 그래서 CI 조건에 맞춘다.
 
 ```bash
-docker compose up -d               # 로컬 Postgres (현재 꺼져 있음)
-cd apps/api && cargo sqlx prepare  # sqlx-cli 0.9.0은 이미 설치돼 있다 (크레이트와 버전 일치 확인함)
+docker compose up -d
+docker compose exec -T db psql -U postgres -c "create database lp_prepare"
+cd apps/api
+DB=postgres://postgres:postgres@localhost:5433/lp_prepare
+DATABASE_URL=$DB sqlx migrate run
+DATABASE_URL=$DB cargo sqlx prepare
 git add .sqlx && git commit   # cd가 유지된 상태다
 ```
 
-캐시가 조용히 낡으면 CI가 아니라 **배포가** 깨진다. `--check`를 CI에 넣는 건 Phase 3에서 한다.
+> **부작용: 데이터가 쌓인 개발 DB로 `--check`를 돌리면 실패한다. 정상이다.**
+> 검증은 위처럼 빈 DB를 겨눠서 한다.
+
+`.sqlx`는 `.prettierignore`에 넣었다 — lint-staged의 `*.{json,md,yml,yaml}` 규칙에 걸려
+재생성할 때마다 24개가 통째로 재포맷돼 diff를 덮었다.
 
 ### Phase 1 — Neon
 
@@ -109,8 +128,9 @@ Neon과 R2가 원격이 되면 API는 **상태 없는 프로세스 하나**다. 
 - **Dockerfile** — `SQLX_OFFLINE=true`, 그리고 **`COPY migrations`를 `cargo build`보다 먼저.**
   `sqlx::migrate!()`가 컴파일 시점에 마이그레이션을 바이너리에 임베드한다.
 - **자동 정지 / scale-to-zero를 끈다.** 위의 이유.
-- **CI에 `cargo sqlx prepare --check`를 추가한다.** 없으면 캐시가 조용히 낡고
-  CI가 아니라 **배포가** 깨진다.
+- ~~**CI에 `cargo sqlx prepare --check`를 추가한다.**~~ ✅ **완료** — `.github/workflows/ci.yml`의
+  `api` 잡, `sqlx migrate run` 직후. 같이 `cargo install sqlx-cli`의 버전을 `^0.9`로 고정했다
+  (미고정이면 CLI가 흘렀을 때 코드가 멀쩡해도 이 스텝이 깨진다).
 - **`JWT_SECRET`을 새로 발급한다.** `api-client.ts:58`이 401에 자동 로그아웃이라
   둘 다 재로그인 한 번으로 끝난다.
 
@@ -219,7 +239,9 @@ API_URL=https://<주소> ./apps/api/scripts/e2e.sh   # 연동·격리·사진 �
 
 - **`sqlx`의 NULL 추론은 쿼리 플랜에 의존한다.** 테이블에 데이터가 쌓이자 LEFT JOIN 왼쪽
   컬럼까지 nullable로 보기 시작해 빌드가 깨졌다. **빈 DB에서만 컴파일되던 코드였다.**
-  `AS "컬럼!"`으로 못 박는다.
+  `AS "컬럼!"`으로 못 박는다. **`.sqlx` 캐시에도 그대로 새겨진다** — 같은 쿼리를 빈 DB와
+  채워진 DB에서 뽑으면 JSON의 `nullable` 배열이 갈린다. override가 codegen을 지배해
+  타입은 같지만 `prepare --check`는 파일을 비교하므로 실패한다. Phase 0 참고.
 - **`EXTRACT`는 NUMERIC을 돌려준다.** int로 캐스팅해야 파라미터 타입이 맞는다.
 - **`Link asChild`가 넣는 `onPress`를 `View`는 무시한다.** `Pressable`이어야 한다.
 - **`Pressable`은 자식 텍스트를 접근성 요소 하나로 합친다.** `accessibilityLabel`을 명시하지 않으면
