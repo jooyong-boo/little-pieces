@@ -6,6 +6,15 @@
 //   ALLOW_CLEARTEXT=1 npx expo run:android --variant release
 const allowCleartext = process.env.ALLOW_CLEARTEXT === '1';
 
+// expo-notifications는 iOS 엔타이틀먼트에 aps-environment를 넣는다. 그런데 **무료** Apple
+// 계정은 푸시 capability를 프로비저닝하지 못해서, 그 상태로는 실기기 빌드가 통째로 죽는다:
+//   Provisioning Profile ... does not support the Push Notifications capability.
+// 무료 계정에서는 어차피 iOS 푸시가 동작하지 않으므로 기본은 떼고 간다.
+// 유료 Developer Program에 가입하면 켜야 한다 — 안 켜면 빌드는 초록인데 iOS 푸시만
+// 조용히 죽는다.
+//   IOS_PUSH=1 npx expo run:ios --configuration Release
+const iosPush = process.env.IOS_PUSH === '1';
+
 // Firebase(FCM) 설정. Android 푸시 토큰 발급에 필요하다.
 // 커밋하지 않는 파일이라, 없으면 조용히 건너뛴다 — 푸시만 안 되고 나머지는 그대로 빌드된다.
 const fs = require('node:fs');
@@ -20,16 +29,35 @@ const hasFirebase = fs.existsSync(path.join(__dirname, googleServicesFile));
 // 기기 설치가 ApplicationVerificationFailed로 죽는다:
 //   hermesvm.framework : 0xe800801c (No code signature found.)
 // ios/는 gitignore(CNG)라 project.pbxproj를 직접 고쳐도 prebuild가 되돌린다.
-const { withXcodeProject } = require('@expo/config-plugins');
+const { withEntitlementsPlist, withXcodeProject } = require('@expo/config-plugins');
 
 const withModernCodeSignIdentity = (config) =>
   withXcodeProject(config, (cfg) => {
-    cfg.modResults.updateBuildProperty('CODE_SIGN_IDENTITY[sdk=iphoneos*]', '"Apple Development"');
+    // 키를 따옴표째 넘겨야 한다. pbxproj에서 대괄호가 든 키는 따옴표로 감싸는 것이 문법이라,
+    // 없이 쓰면 파일이 파싱 불가능해져 다음 prebuild가 통째로 죽는다. 게다가 기존 키를
+    // 교체하지 못하고 따옴표 없는 키를 하나 더 만들어 원본이 그대로 남는다.
+    cfg.modResults.updateBuildProperty(
+      '"CODE_SIGN_IDENTITY[sdk=iphoneos*]"',
+      '"Apple Development"',
+    );
     return cfg;
   });
 
+const withoutPushEntitlement = (config) =>
+  withEntitlementsPlist(config, (cfg) => {
+    delete cfg.modResults['aps-environment'];
+    return cfg;
+  });
+
+/** 위 두 plugin을 순서대로 적용한다. iosPush면 엔타이틀먼트는 건드리지 않는다. */
+const applyIosFixups = (config) =>
+  [withModernCodeSignIdentity, ...(iosPush ? [] : [withoutPushEntitlement])].reduce(
+    (acc, plugin) => plugin(acc),
+    config,
+  );
+
 module.exports = ({ config }) =>
-  withModernCodeSignIdentity({
+  applyIosFixups({
     ...config,
     android: {
       ...config.android,
