@@ -13,6 +13,12 @@ import { formatKoreanDate, fromIsoDate, todayIso, toIsoDate } from '@/lib/timeli
  */
 const PICKER_UTC = Platform.OS === 'android';
 
+/**
+ * 달력의 요일·월 이름은 앱의 로케일을 따른다. 기기 언어가 한국어가 아니면 "September",
+ * "SUN"처럼 영어로 나온다 — 앱의 나머지가 전부 한국어라 그 부분만 튄다.
+ */
+const PICKER_LOCALE = 'ko_KR';
+
 type DateFieldProps<T extends FieldValues> = {
   control: Control<T>;
   name: FieldPath<T>;
@@ -84,6 +90,7 @@ function DatePicker({ value, onChange }: { value: string; onChange: (next: strin
           <DateTimePicker
             value={draft}
             mode="date"
+            locale={PICKER_LOCALE}
             onValueChange={(_, picked) => commit(picked)}
             onDismiss={() => setIsPicking(false)}
           />
@@ -98,6 +105,7 @@ function DatePicker({ value, onChange }: { value: string; onChange: (next: strin
                 value={draft}
                 mode="date"
                 display="inline"
+                locale={PICKER_LOCALE}
                 onValueChange={(_, picked) => setDraft(picked)}
               />
               <View className="gap-3 px-6 py-4">
