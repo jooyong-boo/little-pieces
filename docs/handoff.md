@@ -30,9 +30,14 @@ HA 자동 증설을 막고 있다 — 건드리지 말 것. 자동 정지(`auto_
 
 ### 사람이 로그인해야 하는 곳
 
-Neon · Cloudflare · Fly.io · Expo/EAS · Apple(Xcode) · Google Cloud(Maps 키).
-**전부 개인 계정이다.** 회사 계정으로 박혀 있던 `app.json`의 `owner` 때문에 한 번 헤맸으니,
-계정을 옮길 일이 생기면 거기부터 본다.
+Neon · Cloudflare · Fly.io · Expo/EAS · Apple(Xcode) · Google Cloud(Firebase, Maps 키).
+
+**Google만 개인 계정이 아니다.** `google-services.json`의 프로젝트 `little-pieces-9b1bf`는
+개인 Google 계정에서 접근이 안 된다(회사 계정 소유로 보인다). iOS만 쓰는 동안은 영향이
+없지만 — Apple Maps를 쓰고 iOS 푸시도 꺼져 있다 — **Android를 쓰기 시작하기 전에 옮겨야
+한다.** 절차와 판단할 것은 `plan.md`의 "사용자가 챙길 것"에 있다.
+
+같은 실수가 EAS에서 한 번 있었다(`app.json`의 `owner`). 계정 문제가 의심되면 거기부터 본다.
 
 ### 비밀이 있는 곳
 

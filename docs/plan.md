@@ -439,3 +439,30 @@ API_URL=https://<주소> ./apps/api/scripts/e2e.sh   # 연동·격리·사진 �
 **`apps/mobile/credentials/upload.jks`** — 재발급과 백업. Phase 5로 올렸다.
 
 **클라우드 호스팅 결제 수단과 Neon·R2·Fly.io 계정.** 코드로 대신할 수 없는 유일한 부분이다.
+
+### Google 프로젝트를 개인 계정으로 옮기기 — **Android를 쓰기 시작하기 전에**
+
+`google-services.json`의 프로젝트 `little-pieces-9b1bf`에 **접근 권한이 없다.** 개인 Google
+계정으로 열면 "추가 액세스 권한 필요"가 뜬다 — 회사 계정 소유로 보인다.
+EAS에서 이미 한 번 겪은 것과 **같은 실수가 Firebase 쪽에 남아 있는 것이다**
+(아래 "계정·자격증명"의 `app.json` `owner` 항목 참고).
+
+**지금 급하지 않은 이유:** iOS는 Apple Maps라 Google이 경로에 아예 없고, iOS 푸시는
+엔타이틀먼트를 떼서 꺼져 있다. **Google이 실제로 소비되는 건 Android 앱을 쓸 때뿐이다.**
+
+**그대로 두면 무엇이 깨지나:** 회사를 떠나거나 그 프로젝트가 정리되는 순간
+**Android 푸시와 지도가 같이 죽는다.** 개인 앱 비용이 회사 결제 계정으로 나가는 구조일
+수도 있다 — 액수보다 이쪽이 문제다.
+
+**옮길 때 정할 것 두 가지:**
+
+1. **Android 지도를 쓸 것인가.** Google Maps Platform은 활성 결제 계정을 요구하므로
+   개인 계정에 카드를 걸어야 한다. 안 걸면 `app.config.js` 설계대로 **Android 지도만
+   회색으로 뜨고 나머지는 그대로 돈다.** Firebase FCM은 무료라 카드가 필요 없다.
+2. **어느 keystore의 SHA-1로 제한을 걸 것인가.** `upload.jks`를 어차피 재발급할
+   계획이면 그것부터 하고 SHA-1을 한 번만 등록하는 편이 낫다.
+
+절차: Firebase 새 프로젝트(패키지 `com.littlepieces.app`) → `google-services.json` 교체 →
+FCM V1 서비스 계정 키를 Expo에 등록(**슬롯이 두 개다. 아래 함정 참고**) →
+Maps SDK for Android 활성화 후 새 키 → `apps/mobile/.env`의 `GOOGLE_MAPS_ANDROID_KEY` 교체 →
+Android 재빌드로 지도와 푸시 토큰 확인.
